@@ -1,0 +1,16 @@
+apply plugin: 'java'  // the java plugin defines a whole bunch of tasks
+apply plugin: 'application'  // gives us the use of mainClassName
+
+group 'events.equaliser.java.equaliser'
+version '0.0.1'
+
+// executed on `gradle run`
+mainClassName = 'events.equaliser.java.api.Main'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testCompile 'junit:junit:4.12'
+}

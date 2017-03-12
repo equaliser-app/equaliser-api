@@ -20,7 +20,22 @@ public class Tier {
     private final String name;
     private final BigDecimal price;
     private final int availability;
-    private int remaining;
+
+    public int getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public int getAvailability() {
+        return availability;
+    }
 
     private Tier(int id, String name, BigDecimal price, int availability) {
         this.id = id;

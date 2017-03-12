@@ -1,5 +1,7 @@
-package events.equaliser.java.model.geography;
+package events.equaliser.java.model.event;
 
+import events.equaliser.java.model.geography.Coordinates;
+import events.equaliser.java.model.geography.Country;
 import io.vertx.core.json.JsonObject;
 
 import java.awt.Point;
@@ -12,7 +14,7 @@ public class Venue {
     private final String postcode;
     private final String areaCode;
     private final String phone;
-    private final Point location;
+    private final Coordinates location;
 
     public int getId() {
         return id;
@@ -42,12 +44,12 @@ public class Venue {
         return phone;
     }
 
-    public Point getLocation() {
+    public Coordinates getLocation() {
         return location;
     }
 
     private Venue(int id, Country country, String name, String address, String postcode, String areaCode, String phone,
-                 Point location) {
+                  Coordinates location) {
         this.id = id;
         this.country = country;
         this.name = name;
@@ -72,9 +74,8 @@ public class Venue {
                 json.getString("VenuePostcode"),
                 json.getString("VenueAreaCode"),
                 json.getString("VenuePhone"),
-                new Point(0, 0));  // TODO use actual VenueLocation
+                new Coordinates(
+                        json.getDouble("VenueLocationLatitude"),
+                        json.getDouble("VenueLocationLongitude")));
     }
-
-
-
 }

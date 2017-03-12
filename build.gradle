@@ -15,6 +15,7 @@ mainClassName = 'io.vertx.core.Launcher'
 
 repositories {
     mavenCentral()
+    maven { url "https://jitpack.io" }
 }
 
 def vertx_version = '3.4.0'
@@ -22,8 +23,11 @@ dependencies {
     compile group: 'io.vertx', name: 'vertx-core', version: vertx_version
     compile group: 'io.vertx', name: 'vertx-web', version: vertx_version
     compile group: 'io.vertx', name: 'vertx-mysql-postgresql-client', version: vertx_version
+    compile group: 'io.vertx', name: 'vertx-auth-common', version: vertx_version
     compile group: 'org.slf4j', name: 'slf4j-log4j12', version: '1.7.24'  // otherwise we get a NoClassDefFoundError
-    compile group: 'org.mindrot', name: 'jbcrypt', version: '0.4'
+    compile group: 'com.google.zxing', name: 'core', version: '3.3.0'
+    //compile group: 'org.mindrot', name: 'jbcrypt', version: '0.4'
+    compile 'com.github.kenglxn.QRGen:javase:2.2.0'
     testCompile group: 'junit', name: 'junit', version: '4.12'
 }
 

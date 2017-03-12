@@ -27,7 +27,7 @@ public class EphemeralToken {
         return user;
     }
 
-    private byte[] getToken() {
+    public byte[] getToken() {
         return token;
     }
 
@@ -41,7 +41,7 @@ public class EphemeralToken {
         this.expires = expires;
     }
 
-    public EphemeralToken(User user) {
+    private EphemeralToken(User user) {
         this(user, generateToken(), OffsetDateTime.now().plusSeconds(VALIDITY_SECONDS));
     }
 
@@ -72,11 +72,11 @@ public class EphemeralToken {
                 });
     }
 
-    public static void validate(EphemeralToken token,
+    public static void validate(String token,
                                 SQLConnection connection,
                                 Handler<AsyncResult<User>> handler) {
         JsonArray params = new JsonArray()
-                .add(token.getToken());
+                .add(token);
         connection.queryWithParams(
                 "SELECT UserID FROM EphemeralTokens WHERE Token = ? AND Expires < NOW();",
                 params, tokenResult -> {

@@ -2,13 +2,14 @@ package events.equaliser.java.model.image;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import events.equaliser.java.Config;
+import events.equaliser.java.util.Hex;
 import io.vertx.core.json.JsonObject;
 
 public class ImageSize {
 
     private final int width;
     private final int height;
-    private final long crc32;
+    private final byte[] crc32;
 
     public int getWidth() {
         return width;
@@ -18,11 +19,11 @@ public class ImageSize {
         return height;
     }
 
-    public long getCrc32() {
+    public byte[] getCrc32() {
         return crc32;
     }
 
-    private ImageSize(int width, int height, long crc32) {
+    private ImageSize(int width, int height, byte[] crc32) {
         this.width = width;
         this.height = height;
         this.crc32 = crc32;
@@ -30,7 +31,7 @@ public class ImageSize {
 
     @JsonProperty("url")
     public String getUrl() {
-        return String.format("%s/images/%s.jpg", Config.STATIC_CONTENT_URL, Long.toHexString(getCrc32()));
+        return String.format("%s/images/%s.jpg", Config.STATIC_CONTENT_URL, Hex.binToHex(getCrc32()));
     }
 
     /**
@@ -43,6 +44,6 @@ public class ImageSize {
         return new ImageSize(
                 json.getInteger("ImageWidth"),
                 json.getInteger("ImageHeight"),
-                json.getLong("ImageCrc32"));
+                json.getBinary("ImageCrc32"));
     }
 }

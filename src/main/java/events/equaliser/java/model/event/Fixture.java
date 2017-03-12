@@ -1,6 +1,6 @@
 package events.equaliser.java.model.event;
 
-import events.equaliser.java.model.geography.Venue;
+import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -10,19 +10,44 @@ import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class Fixture {
+    private final int id;
     private final BareSeries series;
     private final OffsetDateTime start;
     private final OffsetDateTime finish;
     private final Venue venue;
     private final List<Tier> tiers;
 
-    public Fixture(BareSeries series, OffsetDateTime start, OffsetDateTime finish, Venue venue, List<Tier> tiers) {
+    public int getId() {
+        return id;
+    }
+
+    public BareSeries getSeries() {
+        return series;
+    }
+
+    public OffsetDateTime getStart() {
+        return start;
+    }
+
+    public OffsetDateTime getFinish() {
+        return finish;
+    }
+
+    public Venue getVenue() {
+        return venue;
+    }
+
+    public List<Tier> getTiers() {
+        return tiers;
+    }
+
+    public Fixture(int id, BareSeries series, OffsetDateTime start, OffsetDateTime finish, Venue venue, List<Tier> tiers) {
+        this.id = id;
         this.series = series;
         this.start = start;
         this.finish = finish;
@@ -48,7 +73,8 @@ public class Fixture {
                                 "Venues.Postcode AS VenuePostcode, " +
                                 "Venues.AreaCode AS VenueAreaCode, " +
                                 "Venues.Phone AS VenuePhone, " +
-                                "Venues.Location AS VenueLocation, " +
+                                "X(Venues.Location) AS VenueLocationLatitude, " +
+                                "Y(Venues.Location) AS VenueLocationLongitude, " +
                                 "Countries.CountryID, " +
                                 "Countries.Name AS CountryName, " +
                                 "Countries.Abbreviation AS CountryAbbreviation, " +
@@ -68,11 +94,12 @@ public class Fixture {
                                 else {
                                     List<Fixture> fixtures = new ArrayList<>();
                                     for (JsonObject row : resultSet.getRows()) {
-                                        OffsetDateTime start = row.getInstant("FixtureStart").atOffset(ZoneOffset.UTC);
-                                        OffsetDateTime finish = row.getInstant("FixtureFinish").atOffset(ZoneOffset.UTC);
+                                        OffsetDateTime start = Time.parseOffsetDateTime(row.getString("FixtureStart"));
+                                        OffsetDateTime finish = Time.parseOffsetDateTime(row.getString("FixtureFinish"));
                                         Venue venue = Venue.fromJsonObject(row);
-                                        List<Tier> tiers = fixtureTiers.get(row.getInteger("FixtureID"));
-                                        fixtures.add(new Fixture(series, start, finish, venue, tiers));
+                                        int fixtureId = row.getInteger("FixtureID");
+                                        List<Tier> tiers = fixtureTiers.get(fixtureId);
+                                        fixtures.add(new Fixture(fixtureId, series, start, finish, venue, tiers));
                                     }
                                     result.handle(Future.succeededFuture(fixtures));
                                 }

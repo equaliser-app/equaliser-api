@@ -3,6 +3,7 @@ package events.equaliser.java.model.user;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import events.equaliser.java.model.geography.Country;
+import events.equaliser.java.util.Hex;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -141,11 +142,7 @@ public class User {
 
     @JsonProperty("token")
     public String getTokenAsHex() {
-        StringBuilder builder = new StringBuilder();
-        for (byte b : getToken()) {
-            builder.append(String.format("%02x", b));
-        }
-        return builder.toString();
+        return Hex.binToHex(getToken());
     }
 
     /**
@@ -173,7 +170,7 @@ public class User {
      * @param json The JSON object with correct keys.
      * @return The User representation of the object.
      */
-    private static User fromJsonObject(JsonObject json) {
+    public static User fromJsonObject(JsonObject json) {
         return new User(
                 json.getInteger("UserID"),
                 json.getString("UserUsername"),

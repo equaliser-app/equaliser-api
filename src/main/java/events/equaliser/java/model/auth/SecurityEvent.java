@@ -1,8 +1,9 @@
 package events.equaliser.java.model.auth;
 
+import events.equaliser.java.auth.Session;
+import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.SQLConnection;
 
@@ -10,6 +11,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 
 public class SecurityEvent {
@@ -53,10 +55,16 @@ public class SecurityEvent {
                 json.getInteger("SecurityEventID"),
                 SecurityEventType.fromJsonObject(json),
                 InetAddress.getByAddress(json.getBinary("SecurityEventIPAddress")),
-                OffsetDateTime.ofInstant(json.getInstant("SecurityEventTimestamp"), ZoneOffset.UTC));
+                Time.parseOffsetDateTime(json.getString("SecurityEventTimestamp")));
     }
 
     public String toString() {
         return String.format("SecurityEvent(%s, %s, %s)", getType().getName(), getIp(), getTimestamp());
+    }
+
+    public void retrieveBySession(Session session,
+                                  SQLConnection connection,
+                                  Handler<AsyncResult<List<SecurityEvent>>> handler) {
+
     }
 }

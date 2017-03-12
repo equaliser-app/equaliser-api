@@ -4,7 +4,7 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '1.2.4'  // for building fat jars
 }
 
-group 'event.equaliser.java.equaliser'
+group 'events.equaliser.java.equaliser'
 version '0.0.1'
 
 // JRE version

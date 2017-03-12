@@ -1,16 +1,42 @@
-apply plugin: 'java'  // the java plugin defines a whole bunch of tasks
-apply plugin: 'application'  // gives us the use of mainClassName
+plugins {
+    id 'java'  // the java plugin defines a whole bunch of tasks
+    id 'application'  // gives us the use of mainClassName
+    id 'com.github.johnrengelman.shadow' version '1.2.4'  // for building fat jars
+}
 
-group 'events.equaliser.java.equaliser'
+group 'event.equaliser.java.equaliser'
 version '0.0.1'
 
+// JRE version
+sourceCompatibility = '1.8'
+
 // executed on `gradle run`
-mainClassName = 'events.equaliser.java.api.Main'
+mainClassName = 'io.vertx.core.Launcher'
 
 repositories {
     mavenCentral()
 }
 
+def vertx_version = '3.4.0'
 dependencies {
-    testCompile 'junit:junit:4.12'
+    compile group: 'io.vertx', name: 'vertx-core', version: vertx_version
+    compile group: 'io.vertx', name: 'vertx-web', version: vertx_version
+    compile group: 'io.vertx', name: 'vertx-mysql-postgresql-client', version: vertx_version
+    compile group: 'org.slf4j', name: 'slf4j-log4j12', version: '1.7.24'  // otherwise we get a NoClassDefFoundError
+    compile group: 'org.mindrot', name: 'jbcrypt', version: '0.4'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+shadowJar {
+    classifier = 'fat'
+    manifest {
+        attributes 'Main-Verticle': 'events.equaliser.java.MainVerticle'
+    }
+    mergeServiceFiles {
+        include 'META-INF/services/io.vertx.core.spi.VerticleFactory'
+    }
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '3.2'
 }

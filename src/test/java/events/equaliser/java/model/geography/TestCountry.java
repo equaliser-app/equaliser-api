@@ -5,10 +5,16 @@ import org.junit.Test;
 
 public class TestCountry {
 
+    private static final int ID = 1;
     private static final String NAME = "United Kingdom";
     private static final String ABBREVIATION = "UK";
     private static final String CALLING_CODE = "44";
-    public static final Country COUNTRY = new Country(NAME, ABBREVIATION, CALLING_CODE);
+    public static final Country COUNTRY = new Country(ID, NAME, ABBREVIATION, CALLING_CODE);
+
+    @Test
+    public void testId() {
+        Assert.assertEquals(COUNTRY.getId(), ID);
+    }
 
     @Test
     public void testName() {

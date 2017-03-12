@@ -11,6 +11,7 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="Gradle: io.vertx:vertx-core:3.4.0" level="project" />
     <orderEntry type="library" name="Gradle: io.vertx:vertx-web:3.4.0" level="project" />
+    <orderEntry type="library" name="Gradle: io.vertx:vertx-mysql-postgresql-client:3.4.0" level="project" />
     <orderEntry type="library" name="Gradle: io.netty:netty-common:4.1.8.Final" level="project" />
     <orderEntry type="library" name="Gradle: io.netty:netty-buffer:4.1.8.Final" level="project" />
     <orderEntry type="library" name="Gradle: io.netty:netty-transport:4.1.8.Final" level="project" />
@@ -23,9 +24,18 @@
     <orderEntry type="library" name="Gradle: com.fasterxml.jackson.core:jackson-core:2.7.4" level="project" />
     <orderEntry type="library" name="Gradle: com.fasterxml.jackson.core:jackson-databind:2.7.4" level="project" />
     <orderEntry type="library" name="Gradle: io.vertx:vertx-auth-common:3.4.0" level="project" />
+    <orderEntry type="library" name="Gradle: io.vertx:vertx-sql-common:3.4.0" level="project" />
+    <orderEntry type="library" name="Gradle: org.scala-lang:scala-library:2.12.1" level="project" />
+    <orderEntry type="library" name="Gradle: com.github.mauricio:postgresql-async_2.12:0.2.21" level="project" />
+    <orderEntry type="library" name="Gradle: com.github.mauricio:mysql-async_2.12:0.2.21" level="project" />
     <orderEntry type="library" name="Gradle: io.netty:netty-codec:4.1.8.Final" level="project" />
     <orderEntry type="library" name="Gradle: io.netty:netty-codec-socks:4.1.8.Final" level="project" />
     <orderEntry type="library" name="Gradle: io.netty:netty-codec-dns:4.1.8.Final" level="project" />
     <orderEntry type="library" name="Gradle: com.fasterxml.jackson.core:jackson-annotations:2.7.0" level="project" />
+    <orderEntry type="library" name="Gradle: com.github.mauricio:db-async-common_2.12:0.2.21" level="project" />
+    <orderEntry type="library" name="Gradle: joda-time:joda-time:2.9.7" level="project" />
+    <orderEntry type="library" name="Gradle: org.joda:joda-convert:1.8.1" level="project" />
+    <orderEntry type="library" name="Gradle: io.netty:netty-all:4.1.6.Final" level="project" />
+    <orderEntry type="library" name="Gradle: org.javassist:javassist:3.21.0-GA" level="project" />
   </component>
 </module>

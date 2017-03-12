@@ -43,8 +43,8 @@ public class Tier {
     }
 
     static void retrieveFromSeries(int seriesId,
-                                          SQLConnection connection,
-                                          Handler<AsyncResult<Map<Integer,List<Tier>>>> result) {
+                                   SQLConnection connection,
+                                   Handler<AsyncResult<Map<Integer,List<Tier>>>> result) {
         JsonArray params = new JsonArray().add(seriesId);
         connection.queryWithParams(
                 "SELECT " +
@@ -59,26 +59,26 @@ public class Tier {
                         "ON Tiers.FixtureID = Fixtures.FixtureID " +
                 "WHERE Fixtures.SeriesID = ?;",
                 params, tiers -> {
-            if (tiers.succeeded()) {
-                ResultSet resultSet = tiers.result();
-                if (resultSet.getNumRows() == 0) {
-                    result.handle(Future.failedFuture("No series found with id " + seriesId));
-                }
-                else {
-                    Map<Integer, List<Tier>> fixtureTiers = new HashMap<>();
-                    for (JsonObject row : resultSet.getRows()) {
-                        int fixtureId = row.getInteger("FixtureID");
-                        if (!fixtureTiers.containsKey(fixtureId)) {
-                            fixtureTiers.put(fixtureId, new ArrayList<>());
+                    if (tiers.succeeded()) {
+                        ResultSet resultSet = tiers.result();
+                        if (resultSet.getNumRows() == 0) {
+                            result.handle(Future.failedFuture("No series found with id " + seriesId));
                         }
-                        fixtureTiers.get(fixtureId).add(Tier.fromJsonObject(row));
+                        else {
+                            Map<Integer, List<Tier>> fixtureTiers = new HashMap<>();
+                            for (JsonObject row : resultSet.getRows()) {
+                                int fixtureId = row.getInteger("FixtureID");
+                                if (!fixtureTiers.containsKey(fixtureId)) {
+                                    fixtureTiers.put(fixtureId, new ArrayList<>());
+                                }
+                                fixtureTiers.get(fixtureId).add(Tier.fromJsonObject(row));
+                            }
+                            result.handle(Future.succeededFuture(fixtureTiers));
+                        }
                     }
-                    result.handle(Future.succeededFuture(fixtureTiers));
-                }
-            }
-            else {
-                result.handle(Future.failedFuture(tiers.cause()));
-            }
-        });
+                    else {
+                        result.handle(Future.failedFuture(tiers.cause()));
+                    }
+                });
     }
 }

@@ -5,8 +5,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.twilio.Twilio;
+import events.equaliser.java.auth.Credentials;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.model.auth.EphemeralToken;
+import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.event.Series;
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.user.User;
@@ -18,6 +22,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.asyncsql.AsyncSQLClient;
@@ -26,10 +31,13 @@ import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.handler.SessionHandler;
-import io.vertx.ext.web.sstore.LocalSessionStore;
+import net.glxn.qrgen.core.image.ImageType;
 import net.glxn.qrgen.javase.QRCode;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -39,20 +47,23 @@ public class MainVerticle extends AbstractVerticle {
     private static final int MB = 1024 * KB;
 
     private AsyncSQLClient client;
-    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper mapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule());
     private static final JsonNodeFactory factory = JsonNodeFactory.instance;
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
-        JsonObject config = config().getJsonObject("database");
-        client = MySQLClient.createShared(vertx, config);
+        JsonObject config = config();
+
+        client = MySQLClient.createShared(vertx, config.getJsonObject("database"));
+
+        JsonObject twilio = config.getJsonObject("twilio");
+        Twilio.init(
+                twilio.getString("sid"),
+                twilio.getString("authToken"));
 
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create().setBodyLimit(5 * MB));
-        router.route().handler(SessionHandler
-                .create(LocalSessionStore.create(vertx))
-                .setCookieHttpOnlyFlag(true)
-                .setSessionTimeout(Long.MAX_VALUE)); // TODO .setCookieSecureFlag(true)
 
         // TODO add security headers: http://vertx.io/blog/writing-secure-vert-x-web-apps/
 
@@ -60,6 +71,11 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseJsonHandler(routingContext, this::countries));
         router.get("/series/:id").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::seriesSingle));
+
+        router.post("/auth/first").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::authFirst));
+        router.post("/auth/second").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::authSecond));
         router.post("/auth/ephemeral").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::ephemeralPost));
 
@@ -83,13 +99,12 @@ public class MainVerticle extends AbstractVerticle {
 
     private void databaseHandler(RoutingContext context,
                                  BiConsumer<RoutingContext, SQLConnection> consumer) {
-        HttpServerResponse response = context.response();
         client.getConnection(connection -> {
             if (connection.succeeded()) {
                 consumer.accept(context, connection.result());
             }
             else {
-                writeErrorResponse(response,"Failed to get a database connection from the pool");
+                writeErrorResponse(context.response(),"Failed to get a database connection from the pool");
             }
         });
     }
@@ -188,7 +203,12 @@ public class MainVerticle extends AbstractVerticle {
                               SQLConnection connection,
                               Handler<AsyncResult<JsonNode>> result) {
         try {
-            int id = Integer.parseInt(context.request().getParam("id"));
+            String id_raw = context.request().getParam("id");
+            if (id_raw == null) {
+                result.handle(Future.failedFuture("'id' param missing"));
+                return;
+            }
+            int id = Integer.parseInt(id_raw);
             Series.retrieveFromId(id, connection, data -> {
                 if (data.succeeded()) {
                     Series series = (Series) data.result();  // TODO fix cast - caused by generics erasure issue
@@ -205,43 +225,109 @@ public class MainVerticle extends AbstractVerticle {
         }
     }
 
+    private void authFirst(RoutingContext context,
+                           SQLConnection connection,
+                           Handler<AsyncResult<JsonNode>> handler) {
+        HttpServerRequest request = context.request();
+        String username = request.getFormAttribute("username");  // or email
+        if (username == null) {
+            handler.handle(Future.failedFuture("'username' param missing"));
+            return;
+        }
+        String password = request.getFormAttribute("password");
+        if (password == null) {
+            handler.handle(Future.failedFuture("'password' param missing"));
+            return;
+        }
+        Credentials.validate(username, password, connection, credentials -> {
+            if (credentials.succeeded()) {
+                User user = credentials.result();
+                TwoFactorToken.initiate(user, connection, token -> {
+                    if (token.succeeded()) {
+                        TwoFactorToken sent = token.result();
+                        JsonNode node = mapper.convertValue(sent, JsonNode.class);
+                        handler.handle(Future.succeededFuture(node));
+                    }
+                    else {
+                        handler.handle(Future.failedFuture(token.cause()));
+                    }
+                });
+            }
+            else {
+                handler.handle(Future.failedFuture(credentials.cause()));
+            }
+        });
+    }
+
+    private void authSecond(RoutingContext context,
+                           SQLConnection connection,
+                           Handler<AsyncResult<JsonNode>> handler) {
+        HttpServerRequest request = context.request();
+        byte[] token = Hex.hexToBin(request.getFormAttribute("token"));
+        if (token == null) {
+            handler.handle(Future.failedFuture("'token' param missing"));
+            return;
+        }
+        String code = request.getFormAttribute("code");
+        if (code == null) {
+            handler.handle(Future.failedFuture("'code' param missing"));
+            return;
+        }
+        TwoFactorToken.validate(token, code, connection,
+                (result) -> validateToken(connection, result, handler));
+    }
+
     private void ephemeralGet(RoutingContext context,
                               SQLConnection connection) {
         HttpServerResponse response = context.response();
-        User user = context.get("user");
-        EphemeralToken.generate(user, connection, tokenResult -> {
+        Session session = context.get("session");
+        EphemeralToken.generate(session.getUser(), connection, tokenResult -> {
             if (tokenResult.succeeded()) {
                 EphemeralToken token = tokenResult.result();
-                QRCode code = QRCode.from(Hex.binToHex(token.getToken())).withSize(300, 300);
-                Buffer buffer = Buffer.buffer(code.stream().toByteArray());
+                String data = Hex.binToHex(token.getToken());
+                System.out.println("Data: " + data);
+                QRCode code = QRCode.from(data).withSize(400, 400);
+                byte[] bytes = code.to(ImageType.PNG).stream().toByteArray();
                 response.putHeader("Content-Type", "image/png");
-                response.end(buffer);
+                response.end(Buffer.buffer(bytes));
             }
             else {
-                writeErrorResponse(response, "Failed to generate ephemeral token");
+                writeErrorResponse(response, "Failed to generate ephemeral token: " + tokenResult.cause());
             }
         });
     }
 
     private void ephemeralPost(RoutingContext context,
                                SQLConnection connection,
-                               Handler<AsyncResult<JsonNode>> result) {
-        String ephemeral_token = context.request().getFormAttribute("ephemeral_token");
-        if (ephemeral_token == null) {
-            result.handle(Future.failedFuture("Required param 'ephemeral_token' missing"));
+                               Handler<AsyncResult<JsonNode>> handler) {
+        String raw_token = context.request().getFormAttribute("token");
+        if (raw_token == null) {
+            handler.handle(Future.failedFuture("'token' param missing"));
+            return;
         }
-        else {
-            EphemeralToken.validate(ephemeral_token, connection, validationResult -> {
-                if (validationResult.succeeded()) {
-                    User user = validationResult.result();
-                    ObjectNode node = factory.objectNode();
-                    node.put("session_token", "C8C2E98B83198235C84A48440A08162E31FBE73495232FB0F449A390D66A2342");
-                    node.set("user", mapper.convertValue(user, JsonNode.class));
-                    result.handle(Future.succeededFuture(node));
-                } else {
-                    result.handle(Future.failedFuture(validationResult.cause()));
+        byte[] token = Hex.hexToBin(raw_token);
+        EphemeralToken.validate(token, connection,
+                (result) -> validateToken(connection, result, handler));
+    }
+
+    private static void validateToken(SQLConnection connection,
+                                      AsyncResult<User> userResult,
+                                      Handler<AsyncResult<JsonNode>> result) {
+        if (userResult.succeeded()) {
+            User user = userResult.result();
+            Session.create(user, connection, sessionRes -> {
+                if (sessionRes.succeeded()) {
+                    Session session = sessionRes.result();
+                    ObjectNode wrapper = factory.objectNode();
+                    wrapper.set("session", mapper.convertValue(session, JsonNode.class));
+                    result.handle(Future.succeededFuture(wrapper));
+                }
+                else {
+                    result.handle(Future.failedFuture(sessionRes.cause()));
                 }
             });
+        } else {
+            result.handle(Future.failedFuture(userResult.cause()));
         }
     }
 

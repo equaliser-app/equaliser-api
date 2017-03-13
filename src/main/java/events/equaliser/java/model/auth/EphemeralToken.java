@@ -1,13 +1,13 @@
 package events.equaliser.java.model.auth;
 
 import events.equaliser.java.model.user.User;
+import events.equaliser.java.util.Random;
+import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.auth.PRNG;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 
@@ -16,7 +16,7 @@ import java.time.OffsetDateTime;
 
 public class EphemeralToken {
 
-    private static final int TOKEN_BYTES = 16;
+    private static final int TOKEN_BYTES = 32;
     private static final int VALIDITY_SECONDS = 60 * 10;
 
     private final User user;
@@ -42,14 +42,7 @@ public class EphemeralToken {
     }
 
     private EphemeralToken(User user) {
-        this(user, generateToken(), OffsetDateTime.now().plusSeconds(VALIDITY_SECONDS));
-    }
-
-    private static byte[] generateToken() {
-        PRNG random = new PRNG(Vertx.vertx());
-        byte[] token = new byte[TOKEN_BYTES];
-        random.nextBytes(token);
-        return token;
+        this(user, Random.getBytes(TOKEN_BYTES), OffsetDateTime.now().plusSeconds(VALIDITY_SECONDS));
     }
 
     public static void generate(User user,
@@ -59,9 +52,9 @@ public class EphemeralToken {
         JsonArray params = new JsonArray()
                 .add(token.getUser().getId())
                 .add(token.getToken())
-                .add(token.getExpires());
+                .add(Time.toSql(token.getExpires()));
         connection.updateWithParams(
-                "INSERT INTO EphemeralTokens (UserID, Token, Expires) VALUES (?, ?, ?);",
+                "INSERT INTO EphemeralTokens (UserID, Token, Expires) VALUES (?, FROM_BASE64(?), ?);",
                 params, res -> {
                     if (res.succeeded()) {
                         handler.handle(Future.succeededFuture(token));
@@ -72,13 +65,15 @@ public class EphemeralToken {
                 });
     }
 
-    public static void validate(String token,
+    public static void validate(byte[] token,
                                 SQLConnection connection,
                                 Handler<AsyncResult<User>> handler) {
         JsonArray params = new JsonArray()
                 .add(token);
         connection.queryWithParams(
-                "SELECT UserID FROM EphemeralTokens WHERE Token = ? AND Expires < NOW();",
+                "SELECT UserID " +
+                "FROM EphemeralTokens " +
+                "WHERE Token = FROM_BASE64(?) AND NOW() <= Expires;",
                 params, tokenResult -> {
                     if (tokenResult.succeeded()) {
                         ResultSet results = tokenResult.result();

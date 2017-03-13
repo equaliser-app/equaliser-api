@@ -1,7 +1,10 @@
 package events.equaliser.java.auth;
 
-import events.equaliser.java.model.auth.SecurityEvent;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import events.equaliser.java.model.user.User;
+import events.equaliser.java.util.Hex;
+import events.equaliser.java.util.Random;
 import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -10,9 +13,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.sql.UpdateResult;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Represents an authenticated user session.
@@ -21,11 +24,14 @@ import java.time.ZoneOffset;
  */
 public class Session {
 
+    private static final int SESSION_TOKEN_LENGTH = 64;
+
     private final int id;
     private final User user;
     private final OffsetDateTime started;
     private final byte[] token;
 
+    @JsonIgnore
     public int getId() {
         return id;
     }
@@ -38,8 +44,14 @@ public class Session {
         return started;
     }
 
+    @JsonIgnore
     private byte[] getToken() {
         return token;
+    }
+
+    @JsonProperty("token")
+    public String getTokenHex() {
+        return Hex.binToHex(getToken());
     }
 
     private Session(int id, User user, OffsetDateTime started, byte[] token) {
@@ -61,6 +73,32 @@ public class Session {
                 User.fromJsonObject(json),
                 Time.parseOffsetDateTime(json.getString("SessionStarted")),
                 json.getBinary("SessionToken"));
+    }
+
+    public static void create(User user,
+                              SQLConnection connection,
+                              Handler<AsyncResult<Session>> handler) {
+        OffsetDateTime started = OffsetDateTime.now();
+        byte[] token = Random.getBytes(SESSION_TOKEN_LENGTH);
+        JsonArray params = new JsonArray()
+                .add(user.getId())
+                .add(Time.toSql(started))
+                .add(token);
+        connection.updateWithParams(
+                "INSERT INTO Sessions (UserID, Started, Token) " +
+                "VALUES (?, ?, FROM_BASE64(?));",
+                params, res -> {
+                    if (res.succeeded()) {
+                        UpdateResult result = res.result();
+                        int sessionId = result.getKeys().getInteger(0);
+                        Session session = new Session(sessionId, user, started, token);
+                        handler.handle(Future.succeededFuture(session));
+                    }
+                    else {
+                        handler.handle(Future.failedFuture(res.cause()));
+                    }
+                });
+
     }
 
     public static void retrieveByToken(byte[] token,
@@ -86,10 +124,12 @@ public class Session {
                     "Countries.Name AS CountryName, " +
                     "Countries.Abbreviation AS CountryAbbreviation, " +
                     "Countries.CallingCode AS CountryCallingCode " +
-                "FROM Users " +
+                "FROM Sessions " +
+                    "INNER JOIN Users " +
+                        "ON Users.UserID = Sessions.UserID " +
                     "INNER JOIN Countries " +
                         "ON Countries.CountryID = Users.CountryID " +
-                "WHERE Sessions.Token = ? AND Sessions.IsInvalidated = false;",
+                "WHERE Sessions.Token = FROM_BASE64(?) AND Sessions.IsInvalidated = false;",
                 params, sessionResult -> {
                             if (sessionResult.succeeded()) {
                                 ResultSet results = sessionResult.result();

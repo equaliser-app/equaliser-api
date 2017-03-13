@@ -136,7 +136,6 @@ public class User {
      */
     @JsonProperty("phone")
     public String getPhoneNumber() {
-        // TODO format more nicely
         return String.format("+%s%s%s", getCountry().getCallingCode(), getAreaCode(), getSubscriberNumber());
     }
 

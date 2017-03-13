@@ -61,6 +61,10 @@ public class Session {
         this.token = token;
     }
 
+    public String toString() {
+        return String.format("Session(%s)", getUser());
+    }
+
     /**
      * Turn a JSON object into a session.
      *

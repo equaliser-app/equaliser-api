@@ -2,42 +2,39 @@ package events.equaliser.java.model.user;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import events.equaliser.java.auth.Credentials;
+import events.equaliser.java.image.ImageFile;
+import events.equaliser.java.image.ResizeSpecification;
 import events.equaliser.java.model.geography.Country;
+import events.equaliser.java.model.image.Image;
 import events.equaliser.java.util.Hex;
+import events.equaliser.java.util.Random;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.sql.UpdateResult;
+import io.vertx.ext.web.FileUpload;
 
-import java.util.UUID;
+import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.util.List;
 
 /**
  * Represents a registered Equaliser user.
  */
-public class User {
+public class User extends PublicUser {
+
+    private static final int TOKEN_BYTES = 32;
 
     /**
      * The user's unique identifier.
      */
     private final int id;
-
-    /**
-     * The user's globally unique username.
-     */
-    private final String username;
-
-    /**
-     * The user's forename.
-     */
-    private final String forename;
-
-    /**
-     * The user's surname.
-     */
-    private final String surname;
 
     /**
      * The user's email address.
@@ -64,20 +61,13 @@ public class User {
      */
     private final byte[] token;
 
+    private final int photoId;
+
+    private Image photo;
+
+    @JsonIgnore
     public int getId() {
         return id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public String getForename() {
-        return forename;
-    }
-
-    public String getSurname() {
-        return surname;
     }
 
     public String getEmail() {
@@ -105,7 +95,6 @@ public class User {
 
     /**
      * Initialise a new user.
-     *
      * @param id The user's unique identifier.
      * @param username The user's globally unique username.
      * @param forename The user's forename.
@@ -115,18 +104,31 @@ public class User {
      * @param areaCode The user's area code, e.g. "020", or "01372".
      * @param subscriberNumber The subscriber portion of the user's phone number, e.g. "842336".
      * @param token The user's identification token.
+     * @param photoId The user's photo pointer.
      */
     public User(int id, String username, String forename, String surname, String email, Country country,
-                String areaCode, String subscriberNumber, byte[] token) {
+                String areaCode, String subscriberNumber, byte[] token, int photoId) {
+        super(username, forename, surname);
         this.id = id;
-        this.username = username;
-        this.forename = forename;
-        this.surname = surname;
         this.email = email;
         this.country = country;
         this.areaCode = areaCode;
         this.subscriberNumber = subscriberNumber;
         this.token = token;
+        this.photoId = photoId;
+    }
+
+    public User(int id, String username, String forename, String surname, String email, Country country,
+                String areaCode, String subscriberNumber, byte[] token, Image photo) {
+        super(username, forename, surname);
+        this.id = id;
+        this.email = email;
+        this.country = country;
+        this.areaCode = areaCode;
+        this.subscriberNumber = subscriberNumber;
+        this.token = token;
+        this.photoId = photo.getId();
+        this.photo = photo;
     }
 
     /**
@@ -140,7 +142,7 @@ public class User {
     }
 
     @JsonProperty("token")
-    public String getTokenAsHex() {
+    public String getTokenHex() {
         return Hex.binToHex(getToken());
     }
 
@@ -152,15 +154,6 @@ public class User {
     @JsonIgnore
     public String getEmailRecipient() {
         return String.format("%s %s <%s>", getForename(), getSurname(), getEmail());
-    }
-
-    /**
-     * Get a string representation of this user.
-     *
-     * @return The user as a string.
-     */
-    public String toString() {
-        return String.format("User(%s)", getUsername());
     }
 
     /**
@@ -179,7 +172,8 @@ public class User {
                 Country.fromJsonObject(json),
                 json.getString("UserAreaCode"),
                 json.getString("UserSubscriberNumber"),
-                json.getBinary("UserToken"));
+                json.getBinary("UserToken"),
+                json.getInteger("UserPhotoID"));
     }
 
     public static void retrieveFromId(int id,
@@ -196,6 +190,7 @@ public class User {
                     "Users.AreaCode AS UserAreaCode, " +
                     "Users.SubscriberNumber AS UserSubscriberNumber, " +
                     "Users.Token AS UserToken, " +
+                    "Users.Token AS UserPhotoID, " +
                     "Countries.CountryID, " +
                     "Countries.Name AS CountryName, " +
                     "Countries.Abbreviation AS CountryAbbreviation, " +
@@ -220,5 +215,67 @@ public class User {
                         result.handle(Future.failedFuture(userResult.cause()));
                     }
                 });
+    }
+
+    public static void register(String username,
+                                Country country,
+                                String forename, String surname,
+                                String email,
+                                String areaCode, String subscriberNumber,
+                                String password,
+                                FileUpload photo,
+                                SQLConnection connection,
+                                Handler<AsyncResult<User>> handler) {
+        // TODO this all needs to be wrapped in a big transaction
+        byte[] token = Random.getBytes(TOKEN_BYTES);
+        String hashedPassword = Credentials.hash(password);
+        JsonArray params = new JsonArray()
+                .add(username)
+                .add(country.getId())
+                .add(forename).add(surname)
+                .add(email)
+                .add(areaCode).add(subscriberNumber)
+                .add(hashedPassword)
+                .add(token);
+        Vertx.currentContext().executeBlocking(code -> {
+            try {
+                ImageFile image = new ImageFile(photo);
+                List<ImageFile> sizes = image.resize(ResizeSpecification.PROFILE_PHOTO);
+                code.complete(sizes);
+            } catch (IOException | NoSuchAlgorithmException e) {
+                code.fail(e);
+            }
+        }, result -> {
+            if (result.failed()) {
+                handler.handle(Future.failedFuture(result.cause()));
+                return;
+            }
+            @SuppressWarnings("unchecked")
+            List<ImageFile> sizes = (List<ImageFile>)result.result();
+            Image.insert(sizes, connection, imageRes -> {
+                if (imageRes.succeeded()) {
+                    Image image = imageRes.result();
+                    connection.updateWithParams(
+                            "INSERT INTO Users (Username, CountryID, Forename, Surname, Email, AreaCode, SubscriberNumber, " +
+                                    "Password, Token, ImageID) " +
+                                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, FROM_BASE64(?), ?);",
+                            params, res -> {
+                                if (res.succeeded()) {
+                                    UpdateResult userResult = res.result();
+                                    int id = userResult.getKeys().getInteger(0);
+                                    User user = new User(id, username, forename, surname, email, country, areaCode,
+                                            subscriberNumber, token, image);
+                                    handler.handle(Future.succeededFuture(user));
+                                }
+                                else {
+                                    handler.handle(Future.failedFuture(res.cause()));
+                                }
+                            });
+                }
+                else {
+                    handler.handle(Future.failedFuture(imageRes.cause()));
+                }
+            });
+        });
     }
 }

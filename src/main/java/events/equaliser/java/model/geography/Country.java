@@ -5,7 +5,9 @@ import events.equaliser.java.Config;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 
 import java.util.List;
@@ -101,18 +103,42 @@ public class Country {
                 "CallingCode AS CountryCallingCode " +
                 "FROM Countries " +
                 "ORDER BY CountryName ASC;", query -> {
-            if (query.succeeded()) {
-                List<Country> countries = query.result()
-                        .getRows()
-                        .stream()
-                        .map(Country::fromJsonObject)
-                        .collect(Collectors.toList());
-                result.handle(Future.succeededFuture(countries));
-            }
-            else {
-                result.handle(Future.failedFuture(query.cause()));
-            }
-        });
+                    if (query.succeeded()) {
+                        List<Country> countries = query.result()
+                                .getRows()
+                                .stream()
+                                .map(Country::fromJsonObject)
+                                .collect(Collectors.toList());
+                        result.handle(Future.succeededFuture(countries));
+                    }
+                    else {
+                        result.handle(Future.failedFuture(query.cause()));
+                    }
+                });
+    }
+
+    public static void retrieveById(int id, SQLConnection connection, Handler<AsyncResult<Country>> result) {
+        JsonArray params = new JsonArray().add(id);
+        connection.queryWithParams(
+                "SELECT CountryID, Name AS CountryName, Abbreviation AS CountryAbbreviation, " +
+                "CallingCode AS CountryCallingCode " +
+                "FROM Countries " +
+                "WHERE CountryID = ?;",
+                params, res -> {
+                    if (res.succeeded()) {
+                        ResultSet results = res.result();
+                        if (results.getNumRows() == 0) {
+                            result.handle(Future.failedFuture("No country found with id " + id));
+                        }
+                        else {
+                            JsonObject row = results.getRows().get(0);
+                            result.handle(Future.succeededFuture(Country.fromJsonObject(row)));
+                        }
+                    }
+                    else {
+                        result.handle(Future.failedFuture(res.cause()));
+                    }
+                });
     }
 
     /**

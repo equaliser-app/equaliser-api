@@ -2,9 +2,10 @@ package events.equaliser.java.model.auth;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.twilio.exception.ApiException;
 import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.rest.api.v2010.account.MessageCreator;
 import com.twilio.type.PhoneNumber;
+import com.twilio.rest.api.v2010.account.MessageCreator;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Hex;
 import events.equaliser.java.util.Random;
@@ -73,11 +74,9 @@ public class TwoFactorToken {
         String code = Random.getNumericString(CODE_LENGTH);
         MessageCreator creator = getMessage(user, code, vertx.config());
         vertx.executeBlocking(future -> {
-            //Message message = creator.create(); // no one seems to use createAsync()
-            //System.out.println(message);
-            //String sid = message.getSid();
-            //future.complete(sid);
-            future.complete("SM1f0e8ae6ade43cb3c0ce4525424e404f");
+            Message message = creator.create(); // no one seems to use createAsync()
+            String sid = message.getSid();
+            future.complete(sid);
         }, result -> {
             if (result.succeeded()) {
                 String sid = (String)result.result();
@@ -102,16 +101,22 @@ public class TwoFactorToken {
                             }
                         });
             }
+            else {
+                handler.handle(Future.failedFuture(result.cause()));
+            }
         });
     }
 
     private static MessageCreator getMessage(User user, String code, JsonObject config) {
         JsonObject twilio = config.getJsonObject("twilio");
         String fromNumber = twilio.getJsonObject("number").getString("number");
-        return Message.creator(
-                new PhoneNumber(user.getPhoneNumber()),  // to
-                new PhoneNumber(fromNumber),  // from
-                String.format("%s is your Equaliser verification code.", code));
+        final PhoneNumber from = new PhoneNumber(fromNumber);
+        final PhoneNumber to = new PhoneNumber(user.getPhoneNumber());
+        final String message = String.format(
+                "Hi %s, %s is your Equaliser verification code.",
+                user.getForename(), code);
+        //System.out.printf("Message(from: %s, to: %s, message: %s)\n", from, to, message);
+        return Message.creator(to, from, message);
     }
 
     public static void validate(byte[] token,

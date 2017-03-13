@@ -20,6 +20,7 @@ repositories {
 
 def vertx_version = '3.4.0'
 dependencies {
+    compile group: 'org.imgscalr', name: 'imgscalr-lib', version: '4.2'
     compile group: 'io.vertx', name: 'vertx-core', version: vertx_version
     compile group: 'io.vertx', name: 'vertx-web', version: vertx_version
     compile group: 'io.vertx', name: 'vertx-mysql-postgresql-client', version: vertx_version

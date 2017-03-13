@@ -15,7 +15,7 @@ public class Credentials {
 
     private static final int BCRYPT_ROUNDS = 10;
 
-    private static String hash(String password) {
+    public static String hash(String password) {
         return BCrypt.hashpw(password, BCrypt.gensalt(BCRYPT_ROUNDS));
     }
 

@@ -13,6 +13,7 @@ import events.equaliser.java.model.auth.EphemeralToken;
 import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.event.Series;
 import events.equaliser.java.model.geography.Country;
+import events.equaliser.java.model.user.PublicUser;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Hex;
 import events.equaliser.java.util.TriConsumer;
@@ -28,18 +29,16 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.asyncsql.AsyncSQLClient;
 import io.vertx.ext.asyncsql.MySQLClient;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import net.glxn.qrgen.core.image.ImageType;
 import net.glxn.qrgen.javase.QRCode;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
+import java.util.*;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 public class MainVerticle extends AbstractVerticle {
 
@@ -69,8 +68,14 @@ public class MainVerticle extends AbstractVerticle {
 
         router.get("/countries").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::countries));
+        router.get("/usernames").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::usernames));
+
         router.get("/series/:id").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::seriesSingle));
+
+        router.post("/register").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::register));
 
         router.post("/auth/first").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::authFirst));
@@ -158,8 +163,8 @@ public class MainVerticle extends AbstractVerticle {
     private void authenticate(RoutingContext context,
                               SQLConnection connection) {
         // look for the authentication token
-        String hex_token = context.request().getHeader("Authorization");
-        if (hex_token == null) {
+        String hexToken = context.request().getHeader("Authorization");
+        if (hexToken == null) {
             MainVerticle.writeResponse(
                     context.response(),
                     MainVerticle.errorResponse("Endpoint requires authorisation, but no token provided"),
@@ -168,10 +173,11 @@ public class MainVerticle extends AbstractVerticle {
         }
 
         // we have a token; time to validate it
-        byte[] token = Hex.hexToBin(hex_token);
+        byte[] token = Hex.hexToBin(hexToken);
         Session.retrieveByToken(token, connection, sessionRes -> {
             if (sessionRes.succeeded()) {
                 Session session = sessionRes.result();
+                System.out.println("Identified " + session);
                 context.put("session", session);
                 context.next();
             }
@@ -186,42 +192,137 @@ public class MainVerticle extends AbstractVerticle {
 
     private void countries(RoutingContext context,
                            SQLConnection connection,
-                           Handler<AsyncResult<JsonNode>> result) {
+                           Handler<AsyncResult<JsonNode>> handler) {
         Country.retrieveAll(connection, data -> connection.close(closed -> {
             if (data.succeeded()) {
                 List<Country> countries = data.result();
                 JsonNode node = mapper.convertValue(countries, JsonNode.class);
                 // TODO use id => country dict instead of list
-                result.handle(Future.succeededFuture(node));
+                handler.handle(Future.succeededFuture(node));
             } else {
-                result.handle(Future.failedFuture(data.cause()));
+                handler.handle(Future.failedFuture(data.cause()));
             }
         }));
     }
 
+    private void usernames(RoutingContext context,
+                           SQLConnection connection,
+                           Handler<AsyncResult<JsonNode>> handler) {
+        HttpServerRequest request = context.request();
+        List<String> fields = Collections.singletonList("query");
+        try {
+            Map<String, String> parsed = parseData(request, fields, MainVerticle::getParam);
+            PublicUser.searchByUsername(parsed.get("query"), 5, connection, queryRes -> {
+                if (queryRes.succeeded()) {
+                    List<PublicUser> users = queryRes.result();
+                    JsonNode node = mapper.convertValue(users, JsonNode.class);
+                    handler.handle(Future.succeededFuture(node));
+                }
+                else {
+                    handler.handle(Future.failedFuture(queryRes.cause()));
+                }
+            });
+        } catch (IllegalArgumentException e) {
+            handler.handle(Future.failedFuture(e.getMessage()));
+        }
+    }
+
     private void seriesSingle(RoutingContext context,
                               SQLConnection connection,
-                              Handler<AsyncResult<JsonNode>> result) {
+                              Handler<AsyncResult<JsonNode>> handler) {
         try {
-            String id_raw = context.request().getParam("id");
-            if (id_raw == null) {
-                result.handle(Future.failedFuture("'id' param missing"));
+            String rawId = context.request().getParam("id");
+            if (rawId == null) {
+                handler.handle(Future.failedFuture("'id' param missing"));
                 return;
             }
-            int id = Integer.parseInt(id_raw);
+            int id = Integer.parseInt(rawId);
             Series.retrieveFromId(id, connection, data -> {
                 if (data.succeeded()) {
                     Series series = (Series) data.result();  // TODO fix cast - caused by generics erasure issue
                     JsonNode node = mapper.convertValue(series, JsonNode.class);
-                    result.handle(Future.succeededFuture(node));
+                    handler.handle(Future.succeededFuture(node));
                 }
                 else {
-                    result.handle(Future.failedFuture(data.cause()));
+                    handler.handle(Future.failedFuture(data.cause()));
                 }
             });
         }
         catch (NumberFormatException e) {
-            result.handle(Future.failedFuture("Invalid series id"));
+            handler.handle(Future.failedFuture("Invalid series id"));
+        }
+    }
+
+    private static String getFormAttribute(HttpServerRequest request, String field) {
+        return request.getFormAttribute(field);
+    }
+
+    private static String getParam(HttpServerRequest request, String field) {
+        return request.getParam(field);
+    }
+
+    private static Map<String, String> parseData(HttpServerRequest request, List<String> names,
+                                                 BiFunction<HttpServerRequest, String, String> retriever) {
+        Map<String, String> fields = new HashMap<>();
+        for (String name : names) {
+            String value = retriever.apply(request, name);  // POST (getFormAttribute()) or GET (getParam())
+            if (value == null) {
+                throw new IllegalArgumentException(String.format("'%s' param missing", name));
+            }
+            value = value.trim();
+            if (value.isEmpty()) {
+                throw new IllegalArgumentException(String.format("'%s' param empty", name));
+            }
+            fields.put(name, value);
+        }
+        return fields;
+    }
+
+    private static void missingParam(String name, Handler<AsyncResult<JsonNode>> handler) {
+        handler.handle(Future.failedFuture(String.format("'%s' param missing", name)));
+    }
+
+    private void register(RoutingContext context,
+                          SQLConnection connection,
+                          Handler<AsyncResult<JsonNode>> handler) {
+        Set<FileUpload> files = context.fileUploads();
+        if (files.size() != 1) {
+            handler.handle(Future.failedFuture("1 file should be uploaded"));
+            return;
+        }
+        FileUpload photo = files.iterator().next();
+        if (!photo.contentType().equals("image/jpeg")) {
+            handler.handle(Future.failedFuture("Image must be a JPEG"));
+            return;
+        }
+
+        HttpServerRequest request = context.request();
+        List<String> fields = Arrays.asList("username", "countryId", "forename", "surname", "email", "areaCode",
+                "subscriberNumber", "password");
+        try {
+            Map<String, String> parsed = parseData(request, fields, MainVerticle::getFormAttribute);
+            int countryId = Integer.parseInt(parsed.get("countryId"));
+            Country.retrieveById(countryId, connection, countryRes -> {
+                if (countryRes.succeeded()) {
+                    Country country = countryRes.result();
+                    //System.out.println("Retrieved country: " + country);
+                    User.register(
+                            parsed.get("username"),
+                            country, parsed.get("forename"), parsed.get("surname"),
+                            parsed.get("email"),
+                            parsed.get("areaCode"), parsed.get("subscriberNumber"),
+                            parsed.get("password"),
+                            photo,
+                            connection, registerRes -> initiateTwoFactor(connection, registerRes, handler));
+                }
+                else {
+                    handler.handle(Future.failedFuture(countryRes.cause()));
+                }
+            });
+        } catch (NumberFormatException e) {
+            handler.handle(Future.failedFuture("'countryId' must be numeric"));
+        } catch (IllegalArgumentException e) {
+            handler.handle(Future.failedFuture(e.getMessage()));
         }
     }
 
@@ -239,24 +340,8 @@ public class MainVerticle extends AbstractVerticle {
             handler.handle(Future.failedFuture("'password' param missing"));
             return;
         }
-        Credentials.validate(username, password, connection, credentials -> {
-            if (credentials.succeeded()) {
-                User user = credentials.result();
-                TwoFactorToken.initiate(user, connection, token -> {
-                    if (token.succeeded()) {
-                        TwoFactorToken sent = token.result();
-                        JsonNode node = mapper.convertValue(sent, JsonNode.class);
-                        handler.handle(Future.succeededFuture(node));
-                    }
-                    else {
-                        handler.handle(Future.failedFuture(token.cause()));
-                    }
-                });
-            }
-            else {
-                handler.handle(Future.failedFuture(credentials.cause()));
-            }
-        });
+        Credentials.validate(username, password, connection,
+                credentials -> initiateTwoFactor(connection, credentials, handler));
     }
 
     private void authSecond(RoutingContext context,
@@ -285,7 +370,6 @@ public class MainVerticle extends AbstractVerticle {
             if (tokenResult.succeeded()) {
                 EphemeralToken token = tokenResult.result();
                 String data = Hex.binToHex(token.getToken());
-                System.out.println("Data: " + data);
                 QRCode code = QRCode.from(data).withSize(400, 400);
                 byte[] bytes = code.to(ImageType.PNG).stream().toByteArray();
                 response.putHeader("Content-Type", "image/png");
@@ -300,14 +384,37 @@ public class MainVerticle extends AbstractVerticle {
     private void ephemeralPost(RoutingContext context,
                                SQLConnection connection,
                                Handler<AsyncResult<JsonNode>> handler) {
-        String raw_token = context.request().getFormAttribute("token");
-        if (raw_token == null) {
+        String rawToken = context.request().getFormAttribute("token");
+        if (rawToken == null) {
             handler.handle(Future.failedFuture("'token' param missing"));
             return;
         }
-        byte[] token = Hex.hexToBin(raw_token);
+        byte[] token = Hex.hexToBin(rawToken);
         EphemeralToken.validate(token, connection,
                 (result) -> validateToken(connection, result, handler));
+    }
+
+    private static void initiateTwoFactor(SQLConnection connection,
+                                          AsyncResult<User> userResult,
+                                          Handler<AsyncResult<JsonNode>> result) {
+        if (userResult.succeeded()) {
+            User user = userResult.result();
+            //System.out.println("Initiating 2FA for " + user);
+            TwoFactorToken.initiate(user, connection, tokenRes -> {
+                if (tokenRes.succeeded()) {
+                    TwoFactorToken sent = tokenRes.result();
+                    ObjectNode wrapper = factory.objectNode();
+                    wrapper.set("token", mapper.convertValue(sent, JsonNode.class));
+                    result.handle(Future.succeededFuture(wrapper));
+                }
+                else {
+                    result.handle(Future.failedFuture(tokenRes.cause()));
+                }
+            });
+        }
+        else {
+            result.handle(Future.failedFuture(userResult.cause()));
+        }
     }
 
     private static void validateToken(SQLConnection connection,

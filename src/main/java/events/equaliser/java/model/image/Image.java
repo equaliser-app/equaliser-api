@@ -1,5 +1,6 @@
 package events.equaliser.java.model.image;
 
+import events.equaliser.java.image.ImageFile;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -7,7 +8,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.sql.UpdateResult;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,10 +40,37 @@ public class Image {
         return new Image(entry.getKey(), entry.getValue());
     }
 
+    public static void insert(List<ImageFile> sizes,
+                              SQLConnection connection,
+                              Handler<AsyncResult<Image>> handler) {
+        connection.update(
+                "INSERT INTO Images VALUES ()",
+                imageRes -> {
+                    if (imageRes.succeeded()) {
+                        UpdateResult imageResUpdate = imageRes.result();
+                        int imageId = imageResUpdate.getKeys().getInteger(0);
+                        ImageSize.insertBatch(sizes, imageId, connection, sizesRes -> {
+                            if (sizesRes.succeeded()) {
+                                // TODO move images to a dir where they can be served
+                                List<ImageSize> inserted = sizesRes.result();
+                                Image image = new Image(imageId, inserted);
+                                handler.handle(Future.succeededFuture(image));
+                            }
+                            else {
+                                handler.handle(Future.failedFuture(sizesRes.cause()));
+                            }
+                        });
+                    }
+                    else {
+                        handler.handle(Future.failedFuture(imageRes.cause()));
+                    }
+                });
+    }
+
     public void retrieveFromId(int id, SQLConnection connection, Handler<AsyncResult<Image>> result) {
         JsonArray params = new JsonArray().add(id);
         connection.queryWithParams(
-                "SELECT ImageID, Width AS ImageWidth, Height as ImageHeight, Crc32 as ImageCrc32 " +
+                "SELECT ImageID, Width AS ImageWidth, Height as ImageHeight, Sha256 as ImageSha256 " +
                 "FROM ImageSizes " +
                 "WHERE ImageID = ? " +
                 "ORDER BY ImageWidth * ImageHeight ASC;", params, query -> {
@@ -73,7 +103,7 @@ public class Image {
                     "ImageSizes.ImageID, " +
                     "ImageSizes.Width AS ImageWidth, " +
                     "ImageSizes.Height AS ImageHeight, " +
-                    "ImageSizes.Crc32 AS ImageCrc32 " +
+                    "ImageSizes.Sha256 AS ImageSha256 " +
                 "FROM SeriesImages " +
                     "INNER JOIN ImageSizes " +
                         "ON ImageSizes.ImageID = SeriesImages.ImageID " +

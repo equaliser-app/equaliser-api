@@ -2,11 +2,10 @@ package events.equaliser.java.model;
 
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.geography.TestCountry;
+import events.equaliser.java.model.image.Image;
 import events.equaliser.java.model.user.User;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.UUID;
 
 public class TestUser {
 
@@ -19,8 +18,9 @@ public class TestUser {
     private static final String AREA_CODE = "020";
     private static final String SUBSCRIBER_NUMBER = "83983687";
     private static final byte[] TOKEN = new byte[16];
+    private static final int PHOTO_ID = 1; // FIXME
     public static final User USER = new User(ID, USERNAME, FORENAME, SURNAME, EMAIL, COUNTRY, AREA_CODE,
-            SUBSCRIBER_NUMBER, TOKEN);
+            SUBSCRIBER_NUMBER, TOKEN, PHOTO_ID);
 
     @Test
     public void testId() {
@@ -64,6 +64,6 @@ public class TestUser {
 
     @Test
     public void testToken() {
-        Assert.assertEquals(USER.getTokenAsHex(), new String(new char[TOKEN.length * 2]).replace("\0", "0"));
+        Assert.assertEquals(USER.getTokenHex(), new String(new char[TOKEN.length * 2]).replace("\0", "0"));
     }
 }

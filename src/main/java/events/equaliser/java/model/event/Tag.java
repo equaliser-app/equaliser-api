@@ -7,6 +7,8 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,6 +20,8 @@ import java.util.stream.Collectors;
  * Represents a generic tag attached to something.
  */
 public class Tag {
+
+    private static final Logger logger = LoggerFactory.getLogger(Tag.class);
 
     private final int id;
 
@@ -46,6 +50,68 @@ public class Tag {
         return new Tag(
                 json.getInteger("TagID"),
                 json.getString("TagName"));
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Tag(%d, %s)", getId(), getName());
+    }
+
+    public static void retrieveFromId(int id,
+                                      SQLConnection connection,
+                                      Handler<AsyncResult<Tag>> result) {
+        JsonArray params = new JsonArray().add(id);
+        connection.queryWithParams(
+                "SELECT " +
+                    "TagID, " +
+                    "Name AS TagName " +
+                "FROM Tags " +
+                "WHERE TagID = ?;",
+                params, tagResult -> {
+                    if (tagResult.failed()) {
+                        result.handle(Future.failedFuture(tagResult.cause()));
+                        return;
+                    }
+
+                    ResultSet resultSet = tagResult.result();
+                    if (resultSet.getNumRows() == 0) {
+                        result.handle(Future.failedFuture("No tag found with id " + id));
+                        return;
+                    }
+
+                    JsonObject row = resultSet.getRows().get(0);
+                    Tag tag = Tag.fromJsonObject(row);
+                    result.handle(Future.succeededFuture(tag));
+                });
+    }
+
+    public static void retrieveFromName(String name,
+                                        SQLConnection connection,
+                                        Handler<AsyncResult<Tag>> result) {
+        JsonArray params = new JsonArray().add(name);
+        connection.queryWithParams(
+                "SELECT " +
+                    "TagID, " +
+                    "Name AS TagName " +
+                "FROM Tags " +
+                "WHERE Name = ?;",
+                params, tagResult -> {
+                    if (tagResult.failed()) {
+                        logger.error("Failed to find tag with name '{}'", name, tagResult.cause());
+                        result.handle(Future.failedFuture(tagResult.cause()));
+                        return;
+                    }
+
+                    ResultSet resultSet = tagResult.result();
+                    if (resultSet.getNumRows() == 0) {
+                        result.handle(Future.failedFuture("No tag found with name " + name));
+                        return;
+                    }
+
+                    JsonObject row = resultSet.getRows().get(0);
+                    Tag tag = Tag.fromJsonObject(row);
+                    result.handle(Future.succeededFuture(tag));
+                });
     }
 
     public static void retrieveFromSeries(int seriesId,
@@ -82,8 +148,8 @@ public class Tag {
                 });
     }
 
-    public static void retrieveShowcase(SQLConnection connection,
-                                        Handler<AsyncResult<Map<Integer, List<Tag>>>> handler) {
+    public static void retrieveSeriesShowcase(SQLConnection connection,
+                                              Handler<AsyncResult<Map<Integer, List<Tag>>>> handler) {
         connection.query(
                 "SELECT Series.SeriesID, Tags.TagID, Tags.Name AS TagName " +
                 "FROM Series " +
@@ -91,22 +157,46 @@ public class Tag {
                         "ON SeriesTags.SeriesID = Series.SeriesID " +
                     "INNER JOIN Tags " +
                         "ON Tags.TagID = SeriesTags.TagID " +
-                "WHERE Series.IsShowcase = true;", res -> {
-                    if (res.failed()) {
-                        handler.handle(Future.failedFuture(res.cause()));
-                        return;
-                    }
+                "WHERE Series.IsShowcase = true;", res -> processSeriesResult(res, handler));
+    }
 
-                    ResultSet set = res.result();
-                    Map<Integer, List<Tag>> map = new HashMap<>();
-                    for (JsonObject row : set.getRows()) {
-                        int seriesId = row.getInteger("SeriesID");
-                        if (!map.containsKey(seriesId)) {
-                            map.put(seriesId, new ArrayList<>());
-                        }
-                        map.get(seriesId).add(Tag.fromJsonObject(row));
-                    }
-                    handler.handle(Future.succeededFuture(map));
-                });
+    public static void retrieveSeriesTag(Tag tag,
+                                         SQLConnection connection,
+                                         Handler<AsyncResult<Map<Integer, List<Tag>>>> handler) {
+        JsonArray params = new JsonArray().add(tag.getId());
+        connection.queryWithParams(
+                "SELECT " +
+                    "Series.SeriesID, " +
+                    "T2.TagID, " +
+                    "T2.Name AS TagName " +
+                "FROM Tags AS T1 " +
+                    "INNER JOIN SeriesTags AS ST1 " +
+                        "ON ST1.TagID = T1.TagID " +
+                    "INNER JOIN Series " +
+                        "ON Series.SeriesID = ST1.SeriesID " +
+                    "INNER JOIN SeriesTags AS ST2 " +
+                        "ON ST2.SeriesID = Series.SeriesID " +
+                    "INNER JOIN Tags AS T2 " +
+                        "ON T2.TagID = ST2.TagID " +
+                "WHERE T1.TagID = ?;", params, res -> processSeriesResult(res, handler));
+    }
+
+    private static void processSeriesResult(AsyncResult<ResultSet> result,
+                                            Handler<AsyncResult<Map<Integer, List<Tag>>>> handler) {
+        if (result.failed()) {
+            handler.handle(Future.failedFuture(result.cause()));
+            return;
+        }
+
+        ResultSet set = result.result();
+        Map<Integer, List<Tag>> map = new HashMap<>();
+        for (JsonObject row : set.getRows()) {
+            int seriesId = row.getInteger("SeriesID");
+            if (!map.containsKey(seriesId)) {
+                map.put(seriesId, new ArrayList<>());
+            }
+            map.get(seriesId).add(Tag.fromJsonObject(row));
+        }
+        handler.handle(Future.succeededFuture(map));
     }
 }

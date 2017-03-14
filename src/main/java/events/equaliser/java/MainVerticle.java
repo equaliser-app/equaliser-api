@@ -27,8 +27,6 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.asyncsql.AsyncSQLClient;
 import io.vertx.ext.asyncsql.MySQLClient;
 import io.vertx.ext.sql.SQLConnection;
@@ -39,6 +37,8 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 import net.glxn.qrgen.core.image.ImageType;
 import net.glxn.qrgen.javase.QRCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.BiConsumer;
@@ -80,17 +80,18 @@ public class MainVerticle extends AbstractVerticle {
 
         // TODO add security headers: http://vertx.io/blog/writing-secure-vert-x-web-apps/
 
+        router.get("/series/tag/:tag").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::seriesTag));
         router.get("/series/showcase").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::seriesShowcase));
+        router.get("/series/:id").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::seriesSingle));
         router.get("/countries").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::countries));
         router.route("/countries/*").handler(StaticHandler.create()
                 .setWebRoot("countries"));
         router.get("/usernames").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::usernames));
-
-        router.get("/series/:id").handler(
-                routingContext -> databaseJsonHandler(routingContext, this::seriesSingle));
 
         router.post("/register").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::register));
@@ -142,7 +143,7 @@ public class MainVerticle extends AbstractVerticle {
                 writeSuccessResponse(response, done.result());
             }
             else {
-                writeErrorResponse(response, done.cause().toString());
+                writeErrorResponse(response, done.cause().getMessage());
             }
         }));
     }
@@ -261,6 +262,27 @@ public class MainVerticle extends AbstractVerticle {
         });
     }
 
+    private void seriesTag(RoutingContext context,
+                           SQLConnection connection,
+                           Handler<AsyncResult<JsonNode>> handler) {
+        HttpServerRequest request = context.request();
+        try {
+            String tag = validateField("tag", request.getParam("tag"));
+            BareSeries.retrieveFromTag(tag, connection, res -> {
+                if (res.failed()) {
+                    handler.handle(Future.failedFuture(res.cause()));
+                    return;
+                }
+
+                List<BareSeries> series = res.result();
+                JsonNode node = mapper.convertValue(series, JsonNode.class);
+                handler.handle(Future.succeededFuture(node));
+            });
+        } catch (IllegalArgumentException e) {
+            handler.handle(Future.failedFuture(e.getMessage()));
+        }
+    }
+
     private void seriesSingle(RoutingContext context,
                               SQLConnection connection,
                               Handler<AsyncResult<JsonNode>> handler) {
@@ -295,19 +317,23 @@ public class MainVerticle extends AbstractVerticle {
         return request.getParam(field);
     }
 
+    private static String validateField(String name, String value) {
+        if (value == null) {
+            throw new IllegalArgumentException(String.format("'%s' param missing", name));
+        }
+        value = value.trim();
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException(String.format("'%s' param empty", name));
+        }
+        return value;
+    }
+
     private static Map<String, String> parseData(HttpServerRequest request, List<String> names,
                                                  BiFunction<HttpServerRequest, String, String> retriever) {
         Map<String, String> fields = new HashMap<>();
         for (String name : names) {
             String value = retriever.apply(request, name);  // POST (getFormAttribute()) or GET (getParam())
-            if (value == null) {
-                throw new IllegalArgumentException(String.format("'%s' param missing", name));
-            }
-            value = value.trim();
-            if (value.isEmpty()) {
-                throw new IllegalArgumentException(String.format("'%s' param empty", name));
-            }
-            fields.put(name, value);
+            fields.put(name, validateField(name, value));
         }
         return fields;
     }

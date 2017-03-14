@@ -2,6 +2,7 @@ package events.equaliser.java.model.image;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import events.equaliser.java.image.ImageFile;
+import events.equaliser.java.model.event.Tag;
 import events.equaliser.java.util.Hex;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -90,8 +91,8 @@ public class ImageSize {
                 json.getBinary("ImageSha256"));
     }
 
-    public static void retrieveShowcase(SQLConnection connection,
-                                        Handler<AsyncResult<Map<Integer, List<Image>>>> handler) {
+    public static void retrieveSeriesShowcase(SQLConnection connection,
+                                              Handler<AsyncResult<Map<Integer, List<Image>>>> handler) {
         connection.query(
                 "SELECT " +
                     "Series.SeriesID, " +
@@ -104,39 +105,65 @@ public class ImageSize {
                         "ON SeriesImages.SeriesID = Series.SeriesID " +
                     "INNER JOIN ImageSizes " +
                         "ON ImageSizes.ImageID = SeriesImages.ImageID " +
-                "WHERE Series.IsShowcase = true;", res -> {
-                    if (res.failed()) {
-                        handler.handle(Future.failedFuture(res.cause()));
-                        return;
-                    }
+                "WHERE Series.IsShowcase = true;", res -> processSeriesResult(res, handler));
+    }
 
-                    ResultSet set = res.result();
-                    Map<Integer, Map<Integer, List<ImageSize>>> series = new HashMap<>();
-                    for (JsonObject row : set.getRows()) {
-                        int seriesId = row.getInteger("SeriesID");
-                        if (!series.containsKey(seriesId)) {
-                            series.put(seriesId, new HashMap<>());
-                        }
-                        Map<Integer, List<ImageSize>> images = series.get(seriesId);
-                        int imageId = row.getInteger("ImageID");
-                        if (!images.containsKey(imageId)) {
-                            images.put(imageId, new ArrayList<>());
-                        }
-                        images.get(imageId).add(ImageSize.fromJsonObject(row));
-                    }
-                    Map<Integer, List<Image>> images = new HashMap<>();
-                    for (Map.Entry<Integer, Map<Integer, List<ImageSize>>> seriesEntry : series.entrySet()) {
-                        int seriesId = seriesEntry.getKey();
-                        images.put(seriesId, new ArrayList<>());
-                        Map<Integer, List<ImageSize>> seriesEntryValue = seriesEntry.getValue();
-                        for (Map.Entry<Integer, List<ImageSize>> seriesEntryValueEntry : seriesEntryValue.entrySet()) {
-                            int imageId = seriesEntryValueEntry.getKey();
-                            List<ImageSize> sizes = seriesEntryValueEntry.getValue();
-                            Image image = new Image(imageId, sizes);
-                            images.get(seriesId).add(image);
-                        }
-                    }
-                    handler.handle(Future.succeededFuture(images));
-                });
+    public static void retrieveSeriesTag(Tag tag,
+                                         SQLConnection connection,
+                                         Handler<AsyncResult<Map<Integer, List<Image>>>> handler) {
+        JsonArray params = new JsonArray().add(tag.getId());
+        connection.queryWithParams(
+                "SELECT " +
+                    "Series.SeriesID, " +
+                    "SeriesImages.ImageID, " +
+                    "ImageSizes.Width AS ImageWidth, " +
+                    "ImageSizes.Height AS ImageHeight, " +
+                    "ImageSizes.Sha256 AS ImageSha256 " +
+                "FROM Tags " +
+                    "INNER JOIN SeriesTags " +
+                        "ON SeriesTags.TagID = Tags.TagID " +
+                    "INNER JOIN Series " +
+                        "ON Series.SeriesID = SeriesTags.SeriesID " +
+                    "INNER JOIN SeriesImages " +
+                        "ON SeriesImages.SeriesID = Series.SeriesID " +
+                    "INNER JOIN ImageSizes " +
+                        "ON ImageSizes.ImageID = SeriesImages.ImageID " +
+                "WHERE Tags.TagID = ?;", params, res -> processSeriesResult(res, handler));
+    }
+
+    private static void processSeriesResult(AsyncResult<ResultSet> result,
+                                            Handler<AsyncResult<Map<Integer, List<Image>>>> handler) {
+        if (result.failed()) {
+            handler.handle(Future.failedFuture(result.cause()));
+            return;
+        }
+
+        ResultSet set = result.result();
+        Map<Integer, Map<Integer, List<ImageSize>>> series = new HashMap<>();
+        for (JsonObject row : set.getRows()) {
+            int seriesId = row.getInteger("SeriesID");
+            if (!series.containsKey(seriesId)) {
+                series.put(seriesId, new HashMap<>());
+            }
+            Map<Integer, List<ImageSize>> images = series.get(seriesId);
+            int imageId = row.getInteger("ImageID");
+            if (!images.containsKey(imageId)) {
+                images.put(imageId, new ArrayList<>());
+            }
+            images.get(imageId).add(ImageSize.fromJsonObject(row));
+        }
+        Map<Integer, List<Image>> images = new HashMap<>();
+        for (Map.Entry<Integer, Map<Integer, List<ImageSize>>> seriesEntry : series.entrySet()) {
+            int seriesId = seriesEntry.getKey();
+            images.put(seriesId, new ArrayList<>());
+            Map<Integer, List<ImageSize>> seriesEntryValue = seriesEntry.getValue();
+            for (Map.Entry<Integer, List<ImageSize>> seriesEntryValueEntry : seriesEntryValue.entrySet()) {
+                int imageId = seriesEntryValueEntry.getKey();
+                List<ImageSize> sizes = seriesEntryValueEntry.getValue();
+                Image image = new Image(imageId, sizes);
+                images.get(seriesId).add(image);
+            }
+        }
+        handler.handle(Future.succeededFuture(images));
     }
 }

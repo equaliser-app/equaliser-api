@@ -11,6 +11,8 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +23,8 @@ import java.util.stream.Collectors;
  * A series without fixtures.
  */
 public class BareSeries {
+
+    private static final Logger logger = LoggerFactory.getLogger(BareSeries.class);
 
     private final int id;
 
@@ -108,16 +112,55 @@ public class BareSeries {
         });
     }
 
+    public static void retrieveFromTag(String name,
+                                       SQLConnection connection,
+                                       Handler<AsyncResult<List<BareSeries>>> handler) {
+        Tag.retrieveFromName(name, connection, tagResult -> {
+            if (tagResult.failed()) {
+                handler.handle(Future.failedFuture(tagResult.cause()));
+                return;
+            }
+
+            Tag tag = tagResult.result();
+            logger.debug("Identified tag {}", tag);
+            Tag.retrieveSeriesTag(tag, connection, tagsResult -> {
+                if (tagsResult.failed()) {
+                    handler.handle(Future.failedFuture(tagsResult.cause()));
+                    return;
+                }
+
+                Map<Integer, List<Tag>> tagsMap = tagsResult.result();
+                ImageSize.retrieveSeriesTag(tag, connection, imagesResult -> {
+                    if (imagesResult.failed()) {
+                        handler.handle(Future.failedFuture(imagesResult.cause()));
+                        return;
+                    }
+
+                    Map<Integer, List<Image>> imagesMap = imagesResult.result();
+                    JsonArray params = new JsonArray().add(tag.getId());
+                    connection.queryWithParams(
+                            "SELECT Series.SeriesID, Series.Name, Series.Description " +
+                            "FROM SeriesTags " +
+                                "INNER JOIN Series " +
+                                    "ON Series.SeriesID = SeriesTags.SeriesID " +
+                            "WHERE SeriesTags.TagID = ?;",
+                            params,
+                            seriesResult -> processSeriesResult(tagsMap, imagesMap, seriesResult, handler));
+                });
+            });
+        });
+    }
+
     public static void retrieveShowcase(SQLConnection connection,
                                         Handler<AsyncResult<List<BareSeries>>> handler) {
-        Tag.retrieveShowcase(connection, tagsResult -> {
+        Tag.retrieveSeriesShowcase(connection, tagsResult -> {
             if (tagsResult.failed()) {
                 handler.handle(Future.failedFuture(tagsResult.cause()));
                 return;
             }
 
             Map<Integer, List<Tag>> tagsMap = tagsResult.result();
-            ImageSize.retrieveShowcase(connection, imagesResult -> {
+            ImageSize.retrieveSeriesShowcase(connection, imagesResult -> {
                 if (imagesResult.failed()) {
                     handler.handle(Future.failedFuture(imagesResult.cause()));
                     return;
@@ -128,25 +171,29 @@ public class BareSeries {
                         "SELECT SeriesID, Name, Description " +
                         "FROM Series " +
                         "WHERE IsShowcase = true;",
-                        seriesResult -> {
-                            if (seriesResult.failed()) {
-                                handler.handle(Future.failedFuture(seriesResult.cause()));
-                                return;
-                            }
-
-                            ResultSet seriesResults = seriesResult.result();
-                            List<BareSeries> series = new ArrayList<>();
-                            for (JsonObject row : seriesResults.getRows()) {
-                                int seriesId = row.getInteger("SeriesID");
-                                String name = row.getString("Name");
-                                String description = row.getString("Description");
-                                series.add(new BareSeries(seriesId, name, description,
-                                        tagsMap.get(seriesId), imagesMap.get(seriesId)));
-                            }
-                            handler.handle(Future.succeededFuture(series));
-                        });
-
+                        seriesResult -> processSeriesResult(tagsMap, imagesMap, seriesResult, handler));
             });
         });
+    }
+
+    private static void processSeriesResult(Map<Integer, List<Tag>> tagsMap,
+                                            Map<Integer, List<Image>> imagesMap,
+                                            AsyncResult<ResultSet> result,
+                                            Handler<AsyncResult<List<BareSeries>>> handler) {
+        if (result.failed()) {
+            handler.handle(Future.failedFuture(result.cause()));
+            return;
+        }
+
+        ResultSet seriesResults = result.result();
+        List<BareSeries> series = new ArrayList<>();
+        for (JsonObject row : seriesResults.getRows()) {
+            int seriesId = row.getInteger("SeriesID");
+            String name = row.getString("Name");
+            String description = row.getString("Description");
+            series.add(new BareSeries(seriesId, name, description,
+                    tagsMap.get(seriesId), imagesMap.get(seriesId)));
+        }
+        handler.handle(Future.succeededFuture(series));
     }
 }

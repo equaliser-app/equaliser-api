@@ -26,6 +26,7 @@ public class Credentials {
         JsonArray params = new JsonArray()
                 .add(username_email)
                 .add(username_email);
+        System.out.println("Retrieving user from credentials");
         connection.queryWithParams(
                 "SELECT " +
                     "Users.UserID, " +
@@ -37,6 +38,7 @@ public class Credentials {
                     "Users.SubscriberNumber AS UserSubscriberNumber, " +
                     "Users.Token AS UserToken, " +
                     "Users.Password AS UserPassword, " +
+                    "Users.ImageID AS UserImageID, " +
                     "Countries.CountryID, " +
                     "Countries.Name AS CountryName, " +
                     "Countries.Abbreviation AS CountryAbbreviation, " +
@@ -46,6 +48,7 @@ public class Credentials {
                         "ON Countries.CountryID = Users.CountryID " +
                 "WHERE Users.Username = ? OR Users.Email = ?;",
                 params, credentialsResult -> {
+                    System.out.println("User retrieve success?: " + credentialsResult.succeeded());
                     if (credentialsResult.succeeded()) {
                         ResultSet results = credentialsResult.result();
                         if (results.getNumRows() == 0) {

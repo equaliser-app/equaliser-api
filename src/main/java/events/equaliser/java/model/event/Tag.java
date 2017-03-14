@@ -8,7 +8,10 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -76,6 +79,34 @@ public class Tag {
                     else {
                         result.handle(Future.failedFuture(tagsResult.cause()));
                     }
+                });
+    }
+
+    public static void retrieveShowcase(SQLConnection connection,
+                                        Handler<AsyncResult<Map<Integer, List<Tag>>>> handler) {
+        connection.query(
+                "SELECT Series.SeriesID, Tags.TagID, Tags.Name AS TagName " +
+                "FROM Series " +
+                    "INNER JOIN SeriesTags " +
+                        "ON SeriesTags.SeriesID = Series.SeriesID " +
+                    "INNER JOIN Tags " +
+                        "ON Tags.TagID = SeriesTags.TagID " +
+                "WHERE Series.IsShowcase = true;", res -> {
+                    if (res.failed()) {
+                        handler.handle(Future.failedFuture(res.cause()));
+                        return;
+                    }
+
+                    ResultSet set = res.result();
+                    Map<Integer, List<Tag>> map = new HashMap<>();
+                    for (JsonObject row : set.getRows()) {
+                        int seriesId = row.getInteger("SeriesID");
+                        if (!map.containsKey(seriesId)) {
+                            map.put(seriesId, new ArrayList<>());
+                        }
+                        map.get(seriesId).add(Tag.fromJsonObject(row));
+                    }
+                    handler.handle(Future.succeededFuture(map));
                 });
     }
 }

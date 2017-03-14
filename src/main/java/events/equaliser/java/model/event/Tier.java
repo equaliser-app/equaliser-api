@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class Tier {
 
@@ -57,9 +58,37 @@ public class Tier {
                 json.getInteger("TierAvailability"));
     }
 
-    static void retrieveFromSeries(int seriesId,
-                                   SQLConnection connection,
-                                   Handler<AsyncResult<Map<Integer,List<Tier>>>> result) {
+    static void retrieveByFixture(int fixtureId,
+                                  SQLConnection connection,
+                                  Handler<AsyncResult<List<Tier>>> result) {
+        JsonArray params = new JsonArray().add(fixtureId);
+        connection.queryWithParams(
+                "SELECT " +
+                    "TierID, " +
+                    "Name AS TierName, " +
+                    "Price AS TierPrice, " +
+                    "Availability AS TierAvailability, " +
+                    "ReturnsPolicy AS TierReturnsPolicy " +
+                "FROM Tiers " +
+                "WHERE FixtureID = ?;",
+                params, tiersRes -> {
+                    if (tiersRes.succeeded()) {
+                        ResultSet resultSet = tiersRes.result();
+                        List<Tier> tiers = resultSet.getRows()
+                                .stream()
+                                .map(Tier::fromJsonObject)
+                                .collect(Collectors.toList());
+                        result.handle(Future.succeededFuture(tiers));
+                    }
+                    else {
+                        result.handle(Future.failedFuture(tiersRes.cause()));
+                    }
+                });
+    }
+
+    static void retrieveBySeries(int seriesId,
+                                 SQLConnection connection,
+                                 Handler<AsyncResult<Map<Integer,List<Tier>>>> result) {
         JsonArray params = new JsonArray().add(seriesId);
         connection.queryWithParams(
                 "SELECT " +

@@ -124,6 +124,7 @@ public class Session {
                     "Users.AreaCode AS UserAreaCode, " +
                     "Users.SubscriberNumber AS UserSubscriberNumber, " +
                     "Users.Token AS UserToken, " +
+                    "Users.ImageID AS UserImageID, " +
                     "Countries.CountryID, " +
                     "Countries.Name AS CountryName, " +
                     "Countries.Abbreviation AS CountryAbbreviation, " +

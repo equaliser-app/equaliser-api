@@ -1,10 +1,10 @@
 package events.equaliser.java.model.geography;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import events.equaliser.java.Config;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
@@ -57,7 +57,8 @@ public class Country {
 
     @JsonProperty("flag_url")
     public String flagUrl() {
-        return String.format("%s/countries/%s.png", Config.STATIC_CONTENT_URL, getAbbreviation().toLowerCase());
+        String base = Vertx.currentContext().config().getString("static");
+        return String.format("%s/countries/%s.png", base, getAbbreviation().toLowerCase());
     }
 
     /**

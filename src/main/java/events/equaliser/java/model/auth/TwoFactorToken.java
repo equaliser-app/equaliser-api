@@ -2,7 +2,6 @@ package events.equaliser.java.model.auth;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.twilio.exception.ApiException;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
 import com.twilio.rest.api.v2010.account.MessageCreator;
@@ -115,7 +114,7 @@ public class TwoFactorToken {
         final String message = String.format(
                 "Hi %s, %s is your Equaliser verification code.",
                 user.getForename(), code);
-        //System.out.printf("Message(from: %s, to: %s, message: %s)\n", from, to, message);
+        System.out.printf("Message(from: %s, to: %s, message: %s)\n", from, to, message);
         return Message.creator(to, from, message);
     }
 
@@ -134,6 +133,7 @@ public class TwoFactorToken {
                     "Users.AreaCode AS UserAreaCode, " +
                     "Users.SubscriberNumber AS UserSubscriberNumber, " +
                     "Users.Token AS UserToken, " +
+                    "Users.ImageID AS UserImageID, " +
                     "Countries.CountryID, " +
                     "Countries.Name AS CountryName, " +
                     "Countries.Abbreviation AS CountryAbbreviation, " +
@@ -143,20 +143,20 @@ public class TwoFactorToken {
                         "ON Users.UserID = TwoFactorTokens.UserID " +
                     "INNER JOIN Countries " +
                         "ON Countries.CountryID = Users.CountryID " +
-                "WHERE TwoFactorTokens.Token = FROM_BASE64(?) AND TwoFactorTokens.Code = ?;", params, res -> {
-                    if (res.succeeded()) {
-                        ResultSet result = res.result();
-                        if (result.getNumRows() != 1) {
-                            handler.handle(Future.failedFuture("Invalid 2FA token"));
-                        }
-                        else {
-                            JsonObject row = result.getRows().get(0);
-                            handler.handle(Future.succeededFuture(User.fromJsonObject(row)));
-                        }
+                "WHERE TwoFactorTokens.Token = FROM_BASE64(?) AND TwoFactorTokens.Code = ?;", params, validateRes -> {
+                    if (validateRes.failed()) {
+                        handler.handle(Future.failedFuture(validateRes.cause()));
+                        return;
                     }
-                    else {
-                        handler.handle(Future.failedFuture(res.cause()));
+
+                    ResultSet result = validateRes.result();
+                    if (result.getNumRows() != 1) {
+                        handler.handle(Future.failedFuture("Invalid 2FA token"));
+                        return;
                     }
+
+                    JsonObject row = result.getRows().get(0);
+                    User.retrieveProfilePicture(row, connection, handler);
                 });
     }
 }

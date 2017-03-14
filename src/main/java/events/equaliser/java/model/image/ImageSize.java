@@ -1,18 +1,18 @@
 package events.equaliser.java.model.image;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import events.equaliser.java.Config;
 import events.equaliser.java.image.ImageFile;
 import events.equaliser.java.util.Hex;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class ImageSize {
 
@@ -44,7 +44,8 @@ public class ImageSize {
 
     @JsonProperty("url")
     public String getUrl() {
-        return String.format("%s/images/%s.jpg", Config.STATIC_CONTENT_URL, Hex.binToHex(getSha256()));
+        String base = Vertx.currentContext().config().getString("static");
+        return String.format("%s/images/%s.jpg", base, Hex.binToHex(getSha256()));
     }
 
     public static void insertBatch(List<ImageFile> sizes,
@@ -87,5 +88,55 @@ public class ImageSize {
                 json.getInteger("ImageWidth"),
                 json.getInteger("ImageHeight"),
                 json.getBinary("ImageSha256"));
+    }
+
+    public static void retrieveShowcase(SQLConnection connection,
+                                        Handler<AsyncResult<Map<Integer, List<Image>>>> handler) {
+        connection.query(
+                "SELECT " +
+                    "Series.SeriesID, " +
+                    "SeriesImages.ImageID, " +
+                    "ImageSizes.Width AS ImageWidth, " +
+                    "ImageSizes.Height AS ImageHeight, " +
+                    "ImageSizes.Sha256 AS ImageSha256 " +
+                "FROM Series " +
+                    "INNER JOIN SeriesImages " +
+                        "ON SeriesImages.SeriesID = Series.SeriesID " +
+                    "INNER JOIN ImageSizes " +
+                        "ON ImageSizes.ImageID = SeriesImages.ImageID " +
+                "WHERE Series.IsShowcase = true;", res -> {
+                    if (res.failed()) {
+                        handler.handle(Future.failedFuture(res.cause()));
+                        return;
+                    }
+
+                    ResultSet set = res.result();
+                    Map<Integer, Map<Integer, List<ImageSize>>> series = new HashMap<>();
+                    for (JsonObject row : set.getRows()) {
+                        int seriesId = row.getInteger("SeriesID");
+                        if (!series.containsKey(seriesId)) {
+                            series.put(seriesId, new HashMap<>());
+                        }
+                        Map<Integer, List<ImageSize>> images = series.get(seriesId);
+                        int imageId = row.getInteger("ImageID");
+                        if (!images.containsKey(imageId)) {
+                            images.put(imageId, new ArrayList<>());
+                        }
+                        images.get(imageId).add(ImageSize.fromJsonObject(row));
+                    }
+                    Map<Integer, List<Image>> images = new HashMap<>();
+                    for (Map.Entry<Integer, Map<Integer, List<ImageSize>>> seriesEntry : series.entrySet()) {
+                        int seriesId = seriesEntry.getKey();
+                        images.put(seriesId, new ArrayList<>());
+                        Map<Integer, List<ImageSize>> seriesEntryValue = seriesEntry.getValue();
+                        for (Map.Entry<Integer, List<ImageSize>> seriesEntryValueEntry : seriesEntryValue.entrySet()) {
+                            int imageId = seriesEntryValueEntry.getKey();
+                            List<ImageSize> sizes = seriesEntryValueEntry.getValue();
+                            Image image = new Image(imageId, sizes);
+                            images.get(seriesId).add(image);
+                        }
+                    }
+                    handler.handle(Future.succeededFuture(images));
+                });
     }
 }

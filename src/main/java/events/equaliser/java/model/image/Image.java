@@ -1,5 +1,6 @@
 package events.equaliser.java.model.image;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import events.equaliser.java.image.ImageFile;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -23,6 +24,7 @@ public class Image {
 
     private final List<ImageSize> sizes;
 
+    @JsonIgnore
     public int getId() {
         return id;
     }
@@ -31,13 +33,17 @@ public class Image {
         return sizes;
     }
 
-    private Image(int id, List<ImageSize> sizes) {
+    Image(int id, List<ImageSize> sizes) {
         this.id = id;
         this.sizes = sizes;
     }
 
     private static Image fromEntry(Map.Entry<Integer, List<ImageSize>> entry) {
         return new Image(entry.getKey(), entry.getValue());
+    }
+
+    public String toString() {
+        return String.format("Image(%d, %d sizes)", getId(), getSizes().size());
     }
 
     public static void insert(List<ImageFile> sizes,
@@ -67,7 +73,7 @@ public class Image {
                 });
     }
 
-    public void retrieveFromId(int id, SQLConnection connection, Handler<AsyncResult<Image>> result) {
+    public static void retrieveFromId(int id, SQLConnection connection, Handler<AsyncResult<Image>> result) {
         JsonArray params = new JsonArray().add(id);
         connection.queryWithParams(
                 "SELECT ImageID, Width AS ImageWidth, Height as ImageHeight, Sha256 as ImageSha256 " +

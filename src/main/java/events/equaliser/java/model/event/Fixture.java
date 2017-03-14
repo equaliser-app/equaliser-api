@@ -58,7 +58,7 @@ public class Fixture {
     public static void retrieveFromSeries(BareSeries series,
                                           SQLConnection connection,
                                           Handler<AsyncResult<List<Fixture>>> result) {
-        Tier.retrieveFromSeries(series.getId(), connection, tiersResult -> {
+        Tier.retrieveBySeries(series.getId(), connection, tiersResult -> {
             if (tiersResult.succeeded()) {
                 Map<Integer, List<Tier>> fixtureTiers = tiersResult.result();
                 JsonArray params = new JsonArray().add(series.getId());
@@ -79,19 +79,18 @@ public class Fixture {
                                 "Countries.Name AS CountryName, " +
                                 "Countries.Abbreviation AS CountryAbbreviation, " +
                                 "Countries.CallingCode AS CountryCallingCode " +
-                        "FROM Fixtures " +
-                            "INNER JOIN Venues " +
+                                "FROM Fixtures " +
+                                "INNER JOIN Venues " +
                                 "ON Venues.VenueID = Fixtures.VenueID " +
-                            "INNER JOIN Countries " +
+                                "INNER JOIN Countries " +
                                 "ON Countries.CountryID = Venues.CountryID " +
-                        "WHERE Fixtures.SeriesID = ?;",
+                                "WHERE Fixtures.SeriesID = ?;",
                         params, fixturesResult -> {
                             if (fixturesResult.succeeded()) {
                                 ResultSet resultSet = fixturesResult.result();
                                 if (resultSet.getNumRows() == 0) {
                                     result.handle(Future.failedFuture("No series found with id " + series.getId()));
-                                }
-                                else {
+                                } else {
                                     List<Fixture> fixtures = new ArrayList<>();
                                     for (JsonObject row : resultSet.getRows()) {
                                         OffsetDateTime start = Time.parseOffsetDateTime(row.getString("FixtureStart"));
@@ -103,15 +102,13 @@ public class Fixture {
                                     }
                                     result.handle(Future.succeededFuture(fixtures));
                                 }
-                            }
-                            else {
+                            } else {
                                 result.handle(Future.failedFuture(fixturesResult.cause()));
                             }
                         });
-                    }
-                    else {
-                        result.handle(Future.failedFuture(tiersResult.cause()));
-                    }
-                });
+            } else {
+                result.handle(Future.failedFuture(tiersResult.cause()));
+            }
+        });
     }
 }

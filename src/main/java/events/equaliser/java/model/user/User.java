@@ -61,9 +61,9 @@ public class User extends PublicUser {
      */
     private final byte[] token;
 
-    private final int photoId;
+    private final int imageId;
 
-    private Image photo;
+    private Image image;
 
     @JsonIgnore
     public int getId() {
@@ -93,6 +93,10 @@ public class User extends PublicUser {
         return token;
     }
 
+    public Image getImage() {
+        return image;
+    }
+
     /**
      * Initialise a new user.
      * @param id The user's unique identifier.
@@ -104,10 +108,10 @@ public class User extends PublicUser {
      * @param areaCode The user's area code, e.g. "020", or "01372".
      * @param subscriberNumber The subscriber portion of the user's phone number, e.g. "842336".
      * @param token The user's identification token.
-     * @param photoId The user's photo pointer.
+     * @param imageId The user's image pointer.
      */
     public User(int id, String username, String forename, String surname, String email, Country country,
-                String areaCode, String subscriberNumber, byte[] token, int photoId) {
+                String areaCode, String subscriberNumber, byte[] token, int imageId) {
         super(username, forename, surname);
         this.id = id;
         this.email = email;
@@ -115,11 +119,11 @@ public class User extends PublicUser {
         this.areaCode = areaCode;
         this.subscriberNumber = subscriberNumber;
         this.token = token;
-        this.photoId = photoId;
+        this.imageId = imageId;
     }
 
     public User(int id, String username, String forename, String surname, String email, Country country,
-                String areaCode, String subscriberNumber, byte[] token, Image photo) {
+                String areaCode, String subscriberNumber, byte[] token, Image image) {
         super(username, forename, surname);
         this.id = id;
         this.email = email;
@@ -127,8 +131,8 @@ public class User extends PublicUser {
         this.areaCode = areaCode;
         this.subscriberNumber = subscriberNumber;
         this.token = token;
-        this.photoId = photo.getId();
-        this.photo = photo;
+        this.imageId = image.getId();
+        this.image = image;
     }
 
     /**
@@ -173,7 +177,20 @@ public class User extends PublicUser {
                 json.getString("UserAreaCode"),
                 json.getString("UserSubscriberNumber"),
                 json.getBinary("UserToken"),
-                json.getInteger("UserPhotoID"));
+                json.getInteger("UserImageID"));
+    }
+
+    public static void fromJsonObject(JsonObject json, SQLConnection connection, Handler<AsyncResult<User>> handler) {
+        User user = fromJsonObject(json);
+        Image.retrieveFromId(user.imageId, connection, res -> {
+            if (res.failed()) {
+                handler.handle(Future.failedFuture(res.cause()));
+                return;
+            }
+
+            user.image = res.result();
+            handler.handle(Future.succeededFuture(user));
+        });
     }
 
     public static void retrieveFromId(int id,
@@ -190,7 +207,7 @@ public class User extends PublicUser {
                     "Users.AreaCode AS UserAreaCode, " +
                     "Users.SubscriberNumber AS UserSubscriberNumber, " +
                     "Users.Token AS UserToken, " +
-                    "Users.Token AS UserPhotoID, " +
+                    "Users.ImageID AS UserImageID, " +
                     "Countries.CountryID, " +
                     "Countries.Name AS CountryName, " +
                     "Countries.Abbreviation AS CountryAbbreviation, " +
@@ -207,14 +224,26 @@ public class User extends PublicUser {
                         }
                         else {
                             JsonObject row = resultSet.getRows().get(0);
-                            User user = User.fromJsonObject(row);
-                            result.handle(Future.succeededFuture(user));
+                            retrieveProfilePicture(row, connection, result);
                         }
                     }
                     else {
                         result.handle(Future.failedFuture(userResult.cause()));
                     }
                 });
+    }
+
+    public static void retrieveProfilePicture(JsonObject row,
+                                              SQLConnection connection,
+                                              Handler<AsyncResult<User>> handler) {
+        User.fromJsonObject(row, connection, res -> {
+            if (res.failed()) {
+                handler.handle(Future.failedFuture(res.cause()));
+                return;
+            }
+
+            handler.handle(Future.succeededFuture(res.result()));
+        });
     }
 
     public static void register(String username,

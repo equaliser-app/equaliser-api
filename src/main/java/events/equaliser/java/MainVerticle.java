@@ -11,6 +11,7 @@ import events.equaliser.java.auth.Credentials;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.model.auth.EphemeralToken;
 import events.equaliser.java.model.auth.TwoFactorToken;
+import events.equaliser.java.model.event.BareSeries;
 import events.equaliser.java.model.event.Series;
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.user.PublicUser;
@@ -33,6 +34,7 @@ import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.handler.StaticHandler;
 import net.glxn.qrgen.core.image.ImageType;
 import net.glxn.qrgen.javase.QRCode;
 
@@ -63,9 +65,15 @@ public class MainVerticle extends AbstractVerticle {
 
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create().setBodyLimit(5 * MB));
+        router.route("/images/*").handler(StaticHandler.create()
+                .setWebRoot("images"));
+        router.route("/countries/*").handler(StaticHandler.create()
+                .setWebRoot("countries"));
 
         // TODO add security headers: http://vertx.io/blog/writing-secure-vert-x-web-apps/
 
+        router.get("/series/showcase").handler(
+                routingContext -> databaseJsonHandler(routingContext, this::seriesShowcase));
         router.get("/countries").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::countries));
         router.get("/usernames").handler(
@@ -225,6 +233,21 @@ public class MainVerticle extends AbstractVerticle {
         } catch (IllegalArgumentException e) {
             handler.handle(Future.failedFuture(e.getMessage()));
         }
+    }
+
+    private void seriesShowcase(RoutingContext context,
+                                SQLConnection connection,
+                                Handler<AsyncResult<JsonNode>> handler) {
+        Series.retrieveShowcase(connection, seriesRes -> {
+            if (seriesRes.failed()) {
+                handler.handle(Future.failedFuture(seriesRes.cause()));
+                return;
+            }
+
+            List<BareSeries> series = seriesRes.result();
+            JsonNode node = mapper.convertValue(series, JsonNode.class);
+            handler.handle(Future.succeededFuture(node));
+        });
     }
 
     private void seriesSingle(RoutingContext context,
@@ -399,8 +422,9 @@ public class MainVerticle extends AbstractVerticle {
                                           Handler<AsyncResult<JsonNode>> result) {
         if (userResult.succeeded()) {
             User user = userResult.result();
-            //System.out.println("Initiating 2FA for " + user);
+            System.out.println("Initiating 2FA for " + user);
             TwoFactorToken.initiate(user, connection, tokenRes -> {
+                System.out.println("2FA succeeded?: " + tokenRes.succeeded());
                 if (tokenRes.succeeded()) {
                     TwoFactorToken sent = tokenRes.result();
                     ObjectNode wrapper = factory.objectNode();
@@ -413,6 +437,8 @@ public class MainVerticle extends AbstractVerticle {
             });
         }
         else {
+            System.out.println("Failed to obtain user");
+            userResult.cause().printStackTrace();
             result.handle(Future.failedFuture(userResult.cause()));
         }
     }
@@ -425,6 +451,7 @@ public class MainVerticle extends AbstractVerticle {
             Session.create(user, connection, sessionRes -> {
                 if (sessionRes.succeeded()) {
                     Session session = sessionRes.result();
+                    System.out.println(session.getUser().getImage().toString());
                     ObjectNode wrapper = factory.objectNode();
                     wrapper.set("session", mapper.convertValue(session, JsonNode.class));
                     result.handle(Future.succeededFuture(wrapper));

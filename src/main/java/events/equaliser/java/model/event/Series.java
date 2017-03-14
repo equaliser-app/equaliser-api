@@ -16,13 +16,14 @@ public class Series extends BareSeries {
         return fixtures;
     }
 
-    private Series(int id, List<Tag> tags, List<Image> images, List<Fixture> fixtures) {
-        super(id, tags, images);
+    private Series(int id, String name, String description, List<Tag> tags, List<Image> images, List<Fixture> fixtures) {
+        super(id, name, description, tags, images);
         this.fixtures = fixtures;
     }
 
     private static Series withFixtures(BareSeries series, List<Fixture> fixtures) {
-        return new Series(series.getId(), series.getTags(), series.getImages(), fixtures);
+        return new Series(series.getId(), series.getName(), series.getDescription(), series.getTags(),
+                series.getImages(), fixtures);
     }
 
     public static void retrieveFromId(int id,

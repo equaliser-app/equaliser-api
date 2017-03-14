@@ -27,6 +27,8 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.asyncsql.AsyncSQLClient;
 import io.vertx.ext.asyncsql.MySQLClient;
 import io.vertx.ext.sql.SQLConnection;
@@ -44,6 +46,8 @@ import java.util.function.BiFunction;
 
 public class MainVerticle extends AbstractVerticle {
 
+    private static final Logger logger = LoggerFactory.getLogger(MainVerticle.class);
+
     private static final int KB = 1024;
     private static final int MB = 1024 * KB;
 
@@ -54,6 +58,7 @@ public class MainVerticle extends AbstractVerticle {
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
+
         JsonObject config = config();
 
         client = MySQLClient.createShared(vertx, config.getJsonObject("database"));
@@ -65,10 +70,13 @@ public class MainVerticle extends AbstractVerticle {
 
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create().setBodyLimit(5 * MB));
+        router.route().handler(context -> {
+            HttpServerRequest request = context.request();
+            logger.info("{} {}", request.method(), request.uri());
+            context.next();
+        });
         router.route("/images/*").handler(StaticHandler.create()
                 .setWebRoot("images"));
-        router.route("/countries/*").handler(StaticHandler.create()
-                .setWebRoot("countries"));
 
         // TODO add security headers: http://vertx.io/blog/writing-secure-vert-x-web-apps/
 
@@ -76,6 +84,8 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseJsonHandler(routingContext, this::seriesShowcase));
         router.get("/countries").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::countries));
+        router.route("/countries/*").handler(StaticHandler.create()
+                .setWebRoot("countries"));
         router.get("/usernames").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::usernames));
 
@@ -103,7 +113,7 @@ public class MainVerticle extends AbstractVerticle {
         HttpServer server = vertx.createHttpServer();
         server.requestHandler(router::accept).listen(listenPort, handler -> {
             if (!handler.succeeded()) {
-                System.err.println("Failed to listen on port " + listenPort);
+                logger.error("Failed to listen on port {}", listenPort);
             }
         });
 
@@ -185,7 +195,7 @@ public class MainVerticle extends AbstractVerticle {
         Session.retrieveByToken(token, connection, sessionRes -> {
             if (sessionRes.succeeded()) {
                 Session session = sessionRes.result();
-                System.out.println("Identified " + session);
+                logger.debug("Identified session {}", session);
                 context.put("session", session);
                 context.next();
             }
@@ -201,6 +211,7 @@ public class MainVerticle extends AbstractVerticle {
     private void countries(RoutingContext context,
                            SQLConnection connection,
                            Handler<AsyncResult<JsonNode>> handler) {
+        logger.info("Showing countries");
         Country.retrieveAll(connection, data -> connection.close(closed -> {
             if (data.succeeded()) {
                 List<Country> countries = data.result();
@@ -328,7 +339,6 @@ public class MainVerticle extends AbstractVerticle {
             Country.retrieveById(countryId, connection, countryRes -> {
                 if (countryRes.succeeded()) {
                     Country country = countryRes.result();
-                    //System.out.println("Retrieved country: " + country);
                     User.register(
                             parsed.get("username"),
                             country, parsed.get("forename"), parsed.get("surname"),
@@ -422,9 +432,8 @@ public class MainVerticle extends AbstractVerticle {
                                           Handler<AsyncResult<JsonNode>> result) {
         if (userResult.succeeded()) {
             User user = userResult.result();
-            System.out.println("Initiating 2FA for " + user);
+            logger.debug("Initiating 2FA for {}", user);
             TwoFactorToken.initiate(user, connection, tokenRes -> {
-                System.out.println("2FA succeeded?: " + tokenRes.succeeded());
                 if (tokenRes.succeeded()) {
                     TwoFactorToken sent = tokenRes.result();
                     ObjectNode wrapper = factory.objectNode();
@@ -437,8 +446,6 @@ public class MainVerticle extends AbstractVerticle {
             });
         }
         else {
-            System.out.println("Failed to obtain user");
-            userResult.cause().printStackTrace();
             result.handle(Future.failedFuture(userResult.cause()));
         }
     }
@@ -451,7 +458,6 @@ public class MainVerticle extends AbstractVerticle {
             Session.create(user, connection, sessionRes -> {
                 if (sessionRes.succeeded()) {
                     Session session = sessionRes.result();
-                    System.out.println(session.getUser().getImage().toString());
                     ObjectNode wrapper = factory.objectNode();
                     wrapper.set("session", mapper.convertValue(session, JsonNode.class));
                     result.handle(Future.succeededFuture(wrapper));

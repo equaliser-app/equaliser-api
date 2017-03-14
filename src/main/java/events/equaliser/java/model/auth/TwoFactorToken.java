@@ -12,12 +12,16 @@ import events.equaliser.java.util.Time;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 
 import java.time.OffsetDateTime;
 
 public class TwoFactorToken {
+
+    private static final Logger logger = LoggerFactory.getLogger(TwoFactorToken.class);
 
     private static final int CODE_LENGTH = 6;
     private static final int TOKEN_LENGTH = 32;
@@ -114,7 +118,7 @@ public class TwoFactorToken {
         final String message = String.format(
                 "Hi %s, %s is your Equaliser verification code.",
                 user.getForename(), code);
-        System.out.printf("Message(from: %s, to: %s, message: %s)\n", from, to, message);
+        logger.debug("Message(from: {}, to: {}, message: {})", from, to, message);
         return Message.creator(to, from, message);
     }
 

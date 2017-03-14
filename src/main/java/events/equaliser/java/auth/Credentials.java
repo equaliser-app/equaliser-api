@@ -6,12 +6,16 @@ import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 import org.mindrot.jbcrypt.BCrypt;
 
 
 public class Credentials {
+
+    private static final Logger logger = LoggerFactory.getLogger(Credentials.class);
 
     private static final int BCRYPT_ROUNDS = 10;
 
@@ -26,7 +30,7 @@ public class Credentials {
         JsonArray params = new JsonArray()
                 .add(username_email)
                 .add(username_email);
-        System.out.println("Retrieving user from credentials");
+        logger.debug("Retrieving user from credentials");
         connection.queryWithParams(
                 "SELECT " +
                     "Users.UserID, " +
@@ -48,7 +52,6 @@ public class Credentials {
                         "ON Countries.CountryID = Users.CountryID " +
                 "WHERE Users.Username = ? OR Users.Email = ?;",
                 params, credentialsResult -> {
-                    System.out.println("User retrieve success?: " + credentialsResult.succeeded());
                     if (credentialsResult.succeeded()) {
                         ResultSet results = credentialsResult.result();
                         if (results.getNumRows() == 0) {

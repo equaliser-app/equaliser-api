@@ -96,7 +96,6 @@ public class PublicUser {
                         handler.handle(Future.succeededFuture(users));
                     }
                     else {
-                        System.out.println("Query failed: " + queryRes.cause());
                         handler.handle(Future.failedFuture(queryRes.cause()));
                     }
                 });

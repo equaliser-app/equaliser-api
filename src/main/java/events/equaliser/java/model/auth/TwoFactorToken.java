@@ -2,11 +2,14 @@ package events.equaliser.java.model.auth;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
 import com.twilio.rest.api.v2010.account.MessageCreator;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Hex;
+import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Random;
 import events.equaliser.java.util.Time;
 import io.vertx.core.*;
@@ -162,5 +165,28 @@ public class TwoFactorToken {
                     JsonObject row = result.getRows().get(0);
                     User.retrieveProfilePicture(row, connection, handler);
                 });
+    }
+
+    public static void initiateTwoFactor(SQLConnection connection,
+                                         AsyncResult<User> userResult,
+                                         Handler<AsyncResult<JsonNode>> result) {
+        if (userResult.succeeded()) {
+            User user = userResult.result();
+            logger.debug("Initiating 2FA for {}", user);
+            TwoFactorToken.initiate(user, connection, tokenRes -> {
+                if (tokenRes.succeeded()) {
+                    TwoFactorToken sent = tokenRes.result();
+                    ObjectNode wrapper = Json.FACTORY.objectNode();
+                    wrapper.set("token", Json.MAPPER.convertValue(sent, JsonNode.class));
+                    result.handle(Future.succeededFuture(wrapper));
+                }
+                else {
+                    result.handle(Future.failedFuture(tokenRes.cause()));
+                }
+            });
+        }
+        else {
+            result.handle(Future.failedFuture(userResult.cause()));
+        }
     }
 }

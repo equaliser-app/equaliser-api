@@ -55,41 +55,107 @@ public class Fixture {
         this.tiers = tiers;
     }
 
-    public static void retrieveFromSeries(BareSeries series,
-                                          SQLConnection connection,
-                                          Handler<AsyncResult<List<Fixture>>> result) {
+    public static void retrieveFromId(int id,
+                                      SQLConnection connection,
+                                      Handler<AsyncResult<Fixture>> handler) {
+        Tier.retrieveByFixture(id, connection, tiersRes -> {
+            if (tiersRes.failed()) {
+                handler.handle(Future.failedFuture(tiersRes.cause()));
+                return;
+            }
+
+            List<Tier> tiers = tiersRes.result();
+            JsonArray params = new JsonArray().add(id);
+            connection.queryWithParams(
+                    "SELECT " +
+                        "Fixtures.SeriesID, " +
+                        "Fixtures.Start AS FixtureStart, " +
+                        "Fixtures.Finish AS FixtureFinish, " +
+                        "Venues.VenueID, " +
+                        "Venues.Name AS VenueName, " +
+                        "Venues.Address AS VenueAddress, " +
+                        "Venues.Postcode AS VenuePostcode, " +
+                        "Venues.AreaCode AS VenueAreaCode, " +
+                        "Venues.Phone AS VenuePhone, " +
+                        "X(Venues.Location) AS VenueLocationLatitude, " +
+                        "Y(Venues.Location) AS VenueLocationLongitude, " +
+                        "Countries.CountryID, " +
+                        "Countries.Name AS CountryName, " +
+                        "Countries.Abbreviation AS CountryAbbreviation, " +
+                        "Countries.CallingCode AS CountryCallingCode " +
+                    "FROM Fixtures " +
+                        "INNER JOIN Venues " +
+                            "ON Venues.VenueID = Fixtures.VenueID " +
+                        "INNER JOIN Countries " +
+                            "ON Countries.CountryID = Venues.CountryID " +
+                    "WHERE Fixtures.FixtureID = ?;",
+                    params, fixtureRes -> {
+                        if (fixtureRes.failed()) {
+                            handler.handle(Future.failedFuture(fixtureRes.cause()));
+                            return;
+                        }
+
+                        ResultSet rows = fixtureRes.result();
+                        if (rows.getNumRows() == 0) {
+                            handler.handle(Future.failedFuture("No fixture found with id " + id));
+                            return;
+                        }
+
+                        JsonObject row = rows.getRows().get(0);
+                        int seriesId = row.getInteger("SeriesID");
+                        BareSeries.retrieveFromId(seriesId, connection, seriesRes -> {
+                            if (seriesRes.failed()) {
+                                handler.handle(Future.failedFuture(
+                                        "No series found with id " + seriesId + " for fixture"));
+                                return;
+                            }
+
+                            BareSeries series = seriesRes.result();
+                            OffsetDateTime start = Time.parseOffsetDateTime(row.getString("FixtureStart"));
+                            OffsetDateTime finish = Time.parseOffsetDateTime(row.getString("FixtureFinish"));
+                            Venue venue = Venue.fromJsonObject(row);
+                            Fixture fixture = new Fixture(id, series, start, finish, venue, tiers);
+                            handler.handle(Future.succeededFuture(fixture));
+                        });
+                    });
+        });
+    }
+
+    static void retrieveFromSeries(BareSeries series,
+                                   SQLConnection connection,
+                                   Handler<AsyncResult<List<Fixture>>> handler) {
         Tier.retrieveBySeries(series.getId(), connection, tiersResult -> {
             if (tiersResult.succeeded()) {
                 Map<Integer, List<Tier>> fixtureTiers = tiersResult.result();
                 JsonArray params = new JsonArray().add(series.getId());
                 connection.queryWithParams(
                         "SELECT " +
-                                "Fixtures.FixtureID, " +
-                                "Fixtures.Start AS FixtureStart, " +
-                                "Fixtures.Finish AS FixtureFinish, " +
-                                "Venues.VenueID, " +
-                                "Venues.Name AS VenueName, " +
-                                "Venues.Address AS VenueAddress, " +
-                                "Venues.Postcode AS VenuePostcode, " +
-                                "Venues.AreaCode AS VenueAreaCode, " +
-                                "Venues.Phone AS VenuePhone, " +
-                                "X(Venues.Location) AS VenueLocationLatitude, " +
-                                "Y(Venues.Location) AS VenueLocationLongitude, " +
-                                "Countries.CountryID, " +
-                                "Countries.Name AS CountryName, " +
-                                "Countries.Abbreviation AS CountryAbbreviation, " +
-                                "Countries.CallingCode AS CountryCallingCode " +
-                                "FROM Fixtures " +
-                                "INNER JOIN Venues " +
+                            "Fixtures.FixtureID, " +
+                            "Fixtures.Start AS FixtureStart, " +
+                            "Fixtures.Finish AS FixtureFinish, " +
+                            "Venues.VenueID, " +
+                            "Venues.Name AS VenueName, " +
+                            "Venues.Address AS VenueAddress, " +
+                            "Venues.Postcode AS VenuePostcode, " +
+                            "Venues.AreaCode AS VenueAreaCode, " +
+                            "Venues.Phone AS VenuePhone, " +
+                            "X(Venues.Location) AS VenueLocationLatitude, " +
+                            "Y(Venues.Location) AS VenueLocationLongitude, " +
+                            "Countries.CountryID, " +
+                            "Countries.Name AS CountryName, " +
+                            "Countries.Abbreviation AS CountryAbbreviation, " +
+                            "Countries.CallingCode AS CountryCallingCode " +
+                        "FROM Fixtures " +
+                            "INNER JOIN Venues " +
                                 "ON Venues.VenueID = Fixtures.VenueID " +
-                                "INNER JOIN Countries " +
+                            "INNER JOIN Countries " +
                                 "ON Countries.CountryID = Venues.CountryID " +
-                                "WHERE Fixtures.SeriesID = ?;",
+                        "WHERE Fixtures.SeriesID = ?;",
                         params, fixturesResult -> {
                             if (fixturesResult.succeeded()) {
                                 ResultSet resultSet = fixturesResult.result();
                                 if (resultSet.getNumRows() == 0) {
-                                    result.handle(Future.failedFuture("No series found with id " + series.getId()));
+                                    handler.handle(Future.failedFuture("No series found with id " + series.getId()));
                                 } else {
                                     List<Fixture> fixtures = new ArrayList<>();
                                     for (JsonObject row : resultSet.getRows()) {
@@ -100,14 +166,14 @@ public class Fixture {
                                         List<Tier> tiers = fixtureTiers.get(fixtureId);
                                         fixtures.add(new Fixture(fixtureId, series, start, finish, venue, tiers));
                                     }
-                                    result.handle(Future.succeededFuture(fixtures));
+                                    handler.handle(Future.succeededFuture(fixtures));
                                 }
                             } else {
-                                result.handle(Future.failedFuture(fixturesResult.cause()));
+                                handler.handle(Future.failedFuture(fixturesResult.cause()));
                             }
                         });
             } else {
-                result.handle(Future.failedFuture(tiersResult.cause()));
+                handler.handle(Future.failedFuture(tiersResult.cause()));
             }
         });
     }

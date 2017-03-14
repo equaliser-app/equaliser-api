@@ -18,16 +18,14 @@ public class Series {
     public static void getId(RoutingContext context,
                              SQLConnection connection,
                              Handler<AsyncResult<JsonNode>> handler) {
+        HttpServerRequest request = context.request();
         try {
-            String rawId = context.request().getParam("id");
-            if (rawId == null) {
-                handler.handle(Future.failedFuture("'id' param missing"));
-                return;
-            }
+            String rawId = Request.validateField("id", request.getParam("id"));
             int id = Integer.parseInt(rawId);
             events.equaliser.java.model.event.Series.retrieveFromId(id, connection, data -> {
                 if (data.succeeded()) {
-                    events.equaliser.java.model.event.Series series = (events.equaliser.java.model.event.Series) data.result();  // TODO fix cast - caused by generics erasure issue
+                    events.equaliser.java.model.event.Series series =
+                            (events.equaliser.java.model.event.Series) data.result();  // TODO fix cast - caused by generics erasure issue
                     JsonNode node = Json.MAPPER.convertValue(series, JsonNode.class);
                     handler.handle(Future.succeededFuture(node));
                 }
@@ -35,9 +33,10 @@ public class Series {
                     handler.handle(Future.failedFuture(data.cause()));
                 }
             });
-        }
-        catch (NumberFormatException e) {
+        } catch (NumberFormatException e) {
             handler.handle(Future.failedFuture("Invalid series id"));
+        } catch (IllegalArgumentException e) {
+            handler.handle(Future.failedFuture(e.getMessage()));
         }
     }
 

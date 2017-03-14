@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.twilio.Twilio;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.handlers.Auth;
+import events.equaliser.java.handlers.Fixtures;
 import events.equaliser.java.handlers.Series;
 import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.geography.Country;
@@ -74,6 +75,8 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseJsonHandler(routingContext, Series::getShowcase));
         router.get("/series/:id").handler(
                 routingContext -> databaseJsonHandler(routingContext, Series::getId));
+        router.get("/fixtures/:id").handler(
+                routingContext -> databaseJsonHandler(routingContext, Fixtures::getId));
         router.get("/countries").handler(
                 routingContext -> databaseJsonHandler(routingContext, this::getCountries));
         router.route("/countries/*").handler(StaticHandler.create()

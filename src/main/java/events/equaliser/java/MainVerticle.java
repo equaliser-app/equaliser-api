@@ -33,6 +33,12 @@ import io.vertx.ext.web.handler.StaticHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.BiConsumer;
 
@@ -137,6 +143,7 @@ public class MainVerticle extends AbstractVerticle {
                 Request.writeSuccessResponse(response, done.result());
             }
             else {
+                logger.error("Request finished with error", done.cause());
                 Request.writeErrorResponse(response, done.cause().getMessage());
             }
         })));
@@ -214,8 +221,8 @@ public class MainVerticle extends AbstractVerticle {
                               SQLConnection connection,
                               Handler<AsyncResult<JsonNode>> handler) {
         Set<FileUpload> files = context.fileUploads();
-        if (files.size() != 1) {
-            handler.handle(Future.failedFuture("1 file should be uploaded"));
+        if (files.size() == 0) {
+            handler.handle(Future.failedFuture("No photo uploaded"));
             return;
         }
         FileUpload photo = files.iterator().next();
@@ -230,22 +237,49 @@ public class MainVerticle extends AbstractVerticle {
         try {
             Map<String, String> parsed = Request.parseData(request, fields, Request::getFormAttribute);
             int countryId = Integer.parseInt(parsed.get("countryId"));
-            Country.retrieveById(countryId, connection, countryRes -> {
-                if (countryRes.succeeded()) {
+
+            // parameters are all there; now ensure the image is acceptable
+            vertx.executeBlocking(code -> {
+                try {
+                    logger.debug("Uploaded file: {}, {} bytes",
+                            photo.uploadedFileName(), photo.size());
+                    BufferedImage image = ImageIO.read(new File(photo.uploadedFileName()));
+                    Files.delete(Paths.get(photo.uploadedFileName()));
+                    if (image == null) {
+                        code.fail("Unreadable image");
+                    }
+                    else {
+                        User.validateProfilePhoto(image);
+                        code.complete(image);
+                    }
+                } catch (IOException e) {
+                    code.fail(e);
+                }
+            }, codeRes -> {
+                if (codeRes.failed()) {
+                    handler.handle(Future.failedFuture(codeRes.cause()));
+                    return;
+                }
+
+                BufferedImage image = (BufferedImage)codeRes.result();
+                Country.retrieveById(countryId, connection, countryRes -> {
+                    if (countryRes.failed()) {
+                        handler.handle(Future.failedFuture(countryRes.cause()));
+                        return;
+                    }
+
                     Country country = countryRes.result();
+                    logger.debug("Identified {}", country);
                     User.register(
                             parsed.get("username"),
                             country, parsed.get("forename"), parsed.get("surname"),
                             parsed.get("email"),
                             parsed.get("areaCode"), parsed.get("subscriberNumber"),
                             parsed.get("password"),
-                            photo,
+                            image,
                             connection,
                             registerRes -> TwoFactorToken.initiateTwoFactor(connection, registerRes, handler));
-                }
-                else {
-                    handler.handle(Future.failedFuture(countryRes.cause()));
-                }
+                });
             });
         } catch (NumberFormatException e) {
             handler.handle(Future.failedFuture("'countryId' must be numeric"));

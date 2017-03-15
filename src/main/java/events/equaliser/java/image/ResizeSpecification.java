@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ResizeSpecification {
 
@@ -30,9 +31,11 @@ public class ResizeSpecification {
         this(dimension, dimension);
     }
 
-    public ImageFile resize(ImageFile image) throws IOException, NoSuchAlgorithmException {
-        BufferedImage buffer = Scalr.resize(image.getImage(), Scalr.Method.QUALITY, Scalr.Mode.FIT_EXACT,
-                width, height);
-        return new ImageFile(buffer);
+    public BufferedImage resize(BufferedImage image) {
+        return Scalr.resize(image, Scalr.Method.QUALITY, Scalr.Mode.FIT_EXACT, width, height);
+    }
+
+    public static List<BufferedImage> resize(BufferedImage image, List<ResizeSpecification> sizes) {
+        return sizes.stream().map(spec -> spec.resize(image)).collect(Collectors.toList());
     }
 }

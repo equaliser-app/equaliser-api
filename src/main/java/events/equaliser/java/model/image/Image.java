@@ -1,7 +1,6 @@
 package events.equaliser.java.model.image;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import events.equaliser.java.image.ImageFile;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -11,7 +10,6 @@ import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.UpdateResult;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,7 +44,7 @@ public class Image {
         return String.format("Image(%d, %d sizes)", getId(), getSizes().size());
     }
 
-    public static void insert(List<ImageFile> sizes,
+    public static void insert(List<ImageSize> sizes,
                               SQLConnection connection,
                               Handler<AsyncResult<Image>> handler) {
         connection.update(
@@ -57,9 +55,7 @@ public class Image {
                         int imageId = imageResUpdate.getKeys().getInteger(0);
                         ImageSize.insertBatch(sizes, imageId, connection, sizesRes -> {
                             if (sizesRes.succeeded()) {
-                                // TODO move images to a dir where they can be served
-                                List<ImageSize> inserted = sizesRes.result();
-                                Image image = new Image(imageId, inserted);
+                                Image image = new Image(imageId, sizes);
                                 handler.handle(Future.succeededFuture(image));
                             }
                             else {

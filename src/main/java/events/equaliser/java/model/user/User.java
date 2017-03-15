@@ -3,10 +3,10 @@ package events.equaliser.java.model.user;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import events.equaliser.java.auth.Credentials;
-import events.equaliser.java.image.ImageFile;
 import events.equaliser.java.image.ResizeSpecification;
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.image.Image;
+import events.equaliser.java.model.image.ImageSize;
 import events.equaliser.java.util.Hex;
 import events.equaliser.java.util.Random;
 import io.vertx.core.AsyncResult;
@@ -18,10 +18,15 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.UpdateResult;
-import io.vertx.ext.web.FileUpload;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,7 +34,10 @@ import java.util.List;
  */
 public class User extends PublicUser {
 
+    private static final Logger logger = LoggerFactory.getLogger(User.class);
+
     private static final int TOKEN_BYTES = 32;
+    private static final int MINIMUM_PROFILE_PHOTO_DIMENSION = 500;
 
     /**
      * The user's unique identifier.
@@ -252,25 +260,25 @@ public class User extends PublicUser {
                                 String email,
                                 String areaCode, String subscriberNumber,
                                 String password,
-                                FileUpload photo,
+                                BufferedImage image,
                                 SQLConnection connection,
                                 Handler<AsyncResult<User>> handler) {
         // TODO this all needs to be wrapped in a big transaction
-        byte[] token = Random.getBytes(TOKEN_BYTES);
-        String hashedPassword = Credentials.hash(password);
-        JsonArray params = new JsonArray()
-                .add(username)
-                .add(country.getId())
-                .add(forename).add(surname)
-                .add(email)
-                .add(areaCode).add(subscriberNumber)
-                .add(hashedPassword)
-                .add(token);
         Vertx.currentContext().executeBlocking(code -> {
             try {
-                ImageFile image = new ImageFile(photo);
-                List<ImageFile> sizes = image.resize(ResizeSpecification.PROFILE_PHOTO);
-                code.complete(sizes);
+                // TODO move somewhere where this chunk can be reused
+                List<BufferedImage> toWrite = ResizeSpecification.resize(image, ResizeSpecification.PROFILE_PHOTO);
+                logger.debug("Need to create {} versions of profile picture", toWrite.size());
+                List<ImageSize> written = new ArrayList<>();
+                for (BufferedImage size : toWrite) {
+                    File tempFile = File.createTempFile("profile-picture", ".jpg");
+                    ImageIO.write(size, "JPG", tempFile);
+                    ImageSize rendered = new ImageSize(tempFile, size);
+                    rendered.moveToStorage(tempFile);
+                    logger.debug("Finished {}", rendered);
+                    written.add(rendered);
+                }
+                code.complete(written);
             } catch (IOException | NoSuchAlgorithmException e) {
                 code.fail(e);
             }
@@ -280,10 +288,21 @@ public class User extends PublicUser {
                 return;
             }
             @SuppressWarnings("unchecked")
-            List<ImageFile> sizes = (List<ImageFile>)result.result();
+            List<ImageSize> sizes = (List<ImageSize>)result.result();
             Image.insert(sizes, connection, imageRes -> {
                 if (imageRes.succeeded()) {
-                    Image image = imageRes.result();
+                    Image photo = imageRes.result();
+                    byte[] token = Random.getBytes(TOKEN_BYTES);
+                    String hashedPassword = Credentials.hash(password);
+                    JsonArray params = new JsonArray()
+                            .add(username)
+                            .add(country.getId())
+                            .add(forename).add(surname)
+                            .add(email)
+                            .add(areaCode).add(subscriberNumber)
+                            .add(hashedPassword)
+                            .add(token)
+                            .add(photo.getId());
                     connection.updateWithParams(
                             "INSERT INTO Users (Username, CountryID, Forename, Surname, Email, AreaCode, SubscriberNumber, " +
                                     "Password, Token, ImageID) " +
@@ -293,7 +312,7 @@ public class User extends PublicUser {
                                     UpdateResult userResult = res.result();
                                     int id = userResult.getKeys().getInteger(0);
                                     User user = new User(id, username, forename, surname, email, country, areaCode,
-                                            subscriberNumber, token, image);
+                                            subscriberNumber, token, photo);
                                     handler.handle(Future.succeededFuture(user));
                                 }
                                 else {
@@ -306,5 +325,17 @@ public class User extends PublicUser {
                 }
             });
         });
+    }
+
+    public static void validateProfilePhoto(BufferedImage image) {
+        if (image.getHeight() < MINIMUM_PROFILE_PHOTO_DIMENSION ||
+                image.getWidth() < MINIMUM_PROFILE_PHOTO_DIMENSION) {
+            throw new IllegalArgumentException(
+                    String.format("Image must be at least %dx%dpx",
+                            MINIMUM_PROFILE_PHOTO_DIMENSION,
+                            MINIMUM_PROFILE_PHOTO_DIMENSION));
+        }
+
+        // we don't really care what the type of image is; we can convert it to JPG
     }
 }

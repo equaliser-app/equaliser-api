@@ -1,8 +1,8 @@
 package events.equaliser.java.model.image;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import events.equaliser.java.image.ImageFile;
 import events.equaliser.java.model.event.Tag;
+import events.equaliser.java.util.Filesystem;
 import events.equaliser.java.util.Hex;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
@@ -12,10 +12,21 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.*;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class ImageSize {
+
+    private static final Logger logger = LoggerFactory.getLogger(ImageSize.class);
 
     private final int width;
     private final int height;
@@ -39,8 +50,16 @@ public class ImageSize {
         this.sha256 = sha256;
     }
 
-    private ImageSize(ImageFile file) {
-        this(file.getWidth(), file.getHeight(), file.getSha256());  // TODO this is terrible - sort out these classes
+    public ImageSize(File file, BufferedImage image) throws IOException, NoSuchAlgorithmException {
+        this(image.getWidth(), image.getHeight(), Filesystem.sha256(file));
+    }
+
+    @Override
+    public String toString() {
+        return "ImageSize{" +
+                "width=" + width +
+                ", height=" + height +
+                '}';
     }
 
     @JsonProperty("url")
@@ -49,33 +68,46 @@ public class ImageSize {
         return String.format("%s/images/%s.jpg", base, Hex.binToHex(getSha256()));
     }
 
-    public static void insertBatch(List<ImageFile> sizes,
+    private static Path getStorageDir() {
+        String relative = Vertx.currentContext().config().getJsonObject("storage").getString("images");
+        return Paths.get(relative).toAbsolutePath();
+    }
+
+    public void moveToStorage(File file) throws IOException {
+        final Path from = file.toPath();
+        final Path storageDir = getStorageDir();
+        final String filename = Hex.binToHex(getSha256()) + ".jpg";
+        final Path to = new File(storageDir.toString(), filename).toPath();
+        logger.debug("Moving {} to {}", from, to);
+        Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    public static void insertBatch(List<ImageSize> sizes,
                                    int imageId,
                                    SQLConnection connection,
-                                   Handler<AsyncResult<List<ImageSize>>> handler) {
-        List<JsonArray> batch = new ArrayList<>();
-        for (ImageFile file : sizes) {
-            batch.add(new JsonArray()
-                    .add(imageId)
-                    .add(file.getWidth())
-                    .add(file.getHeight())
-                    .add(file.getSha256()));
-        }
-        connection.batchWithParams(
+                                   Handler<AsyncResult<Void>> handler) {
+        // .batchWithParams() is not implemented... ARGHHHH
+        // TODO the only real solution here is therefore to use RxJava, similar to https://github.com/ReactiveX/RxJava/issues/2645
+        StringBuilder builder = new StringBuilder(
                 "INSERT INTO ImageSizes (ImageID, Width, Height, Sha256) " +
-                "VALUES (?, ?, ?, ?);",
-                batch, insertRes -> {
-                    if (insertRes.succeeded()) {
-                        List<ImageSize> inserted = new ArrayList<>();
-                        for (ImageFile file : sizes) {
-                            inserted.add(new ImageSize(file));
-                        }
-                        handler.handle(Future.succeededFuture(inserted));
-                    }
-                    else {
-                        handler.handle(Future.failedFuture(insertRes.cause()));
-                    }
-                });
+                "VALUES ");
+        for (int i = 0; i < sizes.size(); i++) {
+            ImageSize size = sizes.get(i);
+            builder.append(String.format("(%d, %d, %d, UNHEX('%s'))",
+                    imageId, size.getWidth(), size.getHeight(), Hex.binToHex(size.getSha256())));
+            if (i != sizes.size() - 1) {
+                builder.append(',');
+            }
+        }
+        String statement = builder.toString();
+        connection.update(statement, res -> {
+            if (res.succeeded()) {
+                handler.handle(Future.succeededFuture());
+            }
+            else {
+                handler.handle(Future.failedFuture(res.cause()));
+            }
+        });
     }
 
     /**

@@ -112,6 +112,7 @@ public class MainVerticle extends AbstractVerticle {
         super.start(startFuture);
     }
 
+    // REMEMBER TO CLOSE THE CONNECTION WHEN YOU'RE FINISHED WITH IT!
     private void databaseHandler(RoutingContext context,
                                  BiConsumer<RoutingContext, SQLConnection> consumer) {
         client.getConnection(connection -> {
@@ -124,11 +125,13 @@ public class MainVerticle extends AbstractVerticle {
         });
     }
 
+    // CONNECTION CLOSED FOR YOU - DON'T CLOSE IT
     private void databaseJsonHandler(RoutingContext context,
                                      TriConsumer<RoutingContext,
                                          SQLConnection,
                                          Handler<AsyncResult<JsonNode>>> consumer) {
-        databaseHandler(context, (routingContext, connection) -> consumer.accept(context, connection, done -> {
+        databaseHandler(context, (routingContext, connection) ->
+                consumer.accept(context, connection, done -> connection.close(closed -> {
             HttpServerResponse response = context.response();
             if (done.succeeded()) {
                 Request.writeSuccessResponse(response, done.result());
@@ -136,7 +139,7 @@ public class MainVerticle extends AbstractVerticle {
             else {
                 Request.writeErrorResponse(response, done.cause().getMessage());
             }
-        }));
+        })));
     }
 
     private void authenticate(RoutingContext context,
@@ -144,16 +147,16 @@ public class MainVerticle extends AbstractVerticle {
         // look for the authentication token
         String hexToken = context.request().getHeader("Authorization");
         if (hexToken == null) {
-            Request.writeResponse(
+            connection.close(res -> Request.writeResponse(
                     context.response(),
                     Request.errorResponse("Endpoint requires authorisation, but no token provided"),
-                    401);
+                    401));
             return;
         }
 
         // we have a token; time to validate it
         byte[] token = Hex.hexToBin(hexToken);
-        Session.retrieveByToken(token, connection, sessionRes -> {
+        Session.retrieveByToken(token, connection, sessionRes -> connection.close(res -> {
             if (sessionRes.succeeded()) {
                 Session session = sessionRes.result();
                 logger.debug("Identified session {}", session);
@@ -166,14 +169,14 @@ public class MainVerticle extends AbstractVerticle {
                         Request.errorResponse(sessionRes.cause().toString()),
                         401);
             }
-        });
+        }));
     }
 
     private void getCountries(RoutingContext context,
                               SQLConnection connection,
                               Handler<AsyncResult<JsonNode>> handler) {
         logger.info("Showing countries");
-        Country.retrieveAll(connection, data -> connection.close(closed -> {
+        Country.retrieveAll(connection, data -> {
             if (data.succeeded()) {
                 List<Country> countries = data.result();
                 JsonNode node = Json.MAPPER.convertValue(countries, JsonNode.class);
@@ -182,7 +185,7 @@ public class MainVerticle extends AbstractVerticle {
             } else {
                 handler.handle(Future.failedFuture(data.cause()));
             }
-        }));
+        });
     }
 
     private void getUsernames(RoutingContext context,

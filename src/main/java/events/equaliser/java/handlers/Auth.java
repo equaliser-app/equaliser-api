@@ -67,7 +67,7 @@ public class Auth {
                                         SQLConnection connection) {
         HttpServerResponse response = context.response();
         Session session = context.get("session");
-        EphemeralToken.generate(session.getUser(), connection, tokenResult -> {
+        EphemeralToken.generate(session.getUser(), connection, tokenResult -> connection.close(res -> {
             if (tokenResult.succeeded()) {
                 EphemeralToken token = tokenResult.result();
                 String data = Hex.binToHex(token.getToken());
@@ -77,9 +77,10 @@ public class Auth {
                 response.end(Buffer.buffer(bytes));
             }
             else {
-                Request.writeErrorResponse(response, "Failed to generate ephemeral token: " + tokenResult.cause());
+                Request.writeErrorResponse(response,
+                        "Failed to generate ephemeral token: " + tokenResult.cause());
             }
-        });
+        }));
     }
 
     public static void postAuthEphemeral(RoutingContext context,

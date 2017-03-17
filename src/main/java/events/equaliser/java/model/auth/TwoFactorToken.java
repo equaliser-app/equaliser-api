@@ -5,13 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.type.PhoneNumber;
-import com.twilio.rest.api.v2010.account.MessageCreator;
 import events.equaliser.java.model.user.User;
-import events.equaliser.java.util.Hex;
-import events.equaliser.java.util.Json;
-import events.equaliser.java.util.Random;
-import events.equaliser.java.util.Time;
+import events.equaliser.java.util.*;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -76,30 +71,25 @@ public class TwoFactorToken {
     public static void initiate(User user,
                                 SQLConnection connection,
                                 Handler<AsyncResult<TwoFactorToken>> handler) {
-        Context vertx = Vertx.currentContext();
         String code = Random.getNumericString(CODE_LENGTH);
-        MessageCreator creator = getMessage(user, code, vertx.config());
-        vertx.executeBlocking(future -> {
-            Message message = creator.create(); // no one seems to use createAsync()
-            String sid = message.getSid();
-            future.complete(sid);
-        }, result -> {
+        Sms.send(getMessage(user, code), user, result -> {
             if (result.succeeded()) {
-                String sid = (String)result.result();
+                Message message = result.result();
                 byte[] token = Random.getBytes(TOKEN_LENGTH);
                 OffsetDateTime expires = OffsetDateTime.now().plusMinutes(TOKEN_VALIDITY_MINUTES);
                 JsonArray params = new JsonArray()
                         .add(user.getId())
                         .add(token)
                         .add(code)
-                        .add(sid)
+                        .add(message.getSid())
                         .add(Time.toSql(expires));
                 connection.updateWithParams(
                         "INSERT INTO TwoFactorTokens (UserID, Token, Code, Sid, Expires) " +
                         "VALUES (?, FROM_BASE64(?), ?, ?, ?);",
                         params, res -> {
                             if (res.succeeded()) {
-                                TwoFactorToken inserted = new TwoFactorToken(user, token, code, sid, expires);
+                                TwoFactorToken inserted = new TwoFactorToken(
+                                        user, token, code, message.getSid(), expires);
                                 handler.handle(Future.succeededFuture(inserted));
                             }
                             else {
@@ -113,16 +103,10 @@ public class TwoFactorToken {
         });
     }
 
-    private static MessageCreator getMessage(User user, String code, JsonObject config) {
-        JsonObject twilio = config.getJsonObject("twilio");
-        String fromNumber = twilio.getJsonObject("number").getString("number");
-        final PhoneNumber from = new PhoneNumber(fromNumber);
-        final PhoneNumber to = new PhoneNumber(user.getPhoneNumber());
-        final String message = String.format(
+    private static String getMessage(User user, String code) {
+        return String.format(
                 "Hi %s, %s is your Equaliser verification code.",
                 user.getForename(), code);
-        logger.debug("Message(from: {}, to: {}, message: {})", from, to, message);
-        return Message.creator(to, from, message);
     }
 
     public static void validate(byte[] token,

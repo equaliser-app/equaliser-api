@@ -1,0 +1,3 @@
+#!/bin/bash
+
+java -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory -Dco.paralleluniverse.fibers.verifyInstrumentation -javaagent:/home/george/.gradle/caches/modules-2/files-2.1/co.paralleluniverse/quasar-core/0.7.7/62596720ca04c72586ff10b0c3018c3504539f82/quasar-core-0.7.7-jdk8.jar -jar build/libs/api-0.0.1-fat.jar -conf src/main/conf/api.json

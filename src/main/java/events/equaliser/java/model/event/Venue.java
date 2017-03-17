@@ -60,6 +60,11 @@ public class Venue {
         this.location = location;
     }
 
+    @Override
+    public String toString() {
+        return String.format("Venue(%s, %s, %s)", getId(), getCountry(), getName());
+    }
+
     /**
      * Turn a JSON object into a venue.
      *

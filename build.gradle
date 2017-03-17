@@ -15,7 +15,9 @@ mainClassName = 'io.vertx.core.Launcher'
 
 repositories {
     mavenCentral()
-    maven { url "https://jitpack.io" }
+    maven {
+        url "https://jitpack.io"
+    }
 }
 
 def vertx_version = '3.4.0'
@@ -25,8 +27,10 @@ dependencies {
     compile group: 'io.vertx', name: 'vertx-web', version: vertx_version
     compile group: 'io.vertx', name: 'vertx-mysql-postgresql-client', version: vertx_version
     compile group: 'io.vertx', name: 'vertx-auth-common', version: vertx_version
+    compile group: 'io.vertx', name: 'vertx-sync', version: vertx_version
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.24'
     compile group: 'org.slf4j', name: 'slf4j-log4j12', version: '1.7.24'
+    compile 'co.paralleluniverse:quasar-core:0.7.7:jdk8'
     compile group: 'log4j', name: 'log4j', version: '1.2.17'
     compile group: 'com.google.zxing', name: 'core', version: '3.3.0'
     compile group: 'com.twilio.sdk', name: 'twilio', version: '7.6.0'
@@ -39,7 +43,7 @@ dependencies {
 shadowJar {
     classifier = 'fat'
     manifest {
-        attributes 'Main-Verticle': 'events.equaliser.java.MainVerticle'
+        attributes 'Main-Verticle': 'events.equaliser.java.verticles.MainVerticle'
     }
     mergeServiceFiles {
         include 'META-INF/services/io.vertx.core.spi.VerticleFactory'

@@ -27,7 +27,10 @@ import java.io.File;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Represents a registered Equaliser user.
@@ -144,7 +147,7 @@ public class User extends PublicUser {
     }
 
     /**
-     * Get the user's phone number.
+     * Get the user's complete phone number, e.g. '+447528473628'.
      *
      * @return The phone number.
      */
@@ -241,6 +244,62 @@ public class User extends PublicUser {
                 });
     }
 
+    public static void retrieveFromUsernames(List<String> usernames,
+                                             SQLConnection connection,
+                                             Handler<AsyncResult<Map<String, User>>> handler) {
+        // we require the list of usernames to be non-empty for our query to work
+        if (usernames.isEmpty()) {
+            handler.handle(Future.succeededFuture(new HashMap<>()));
+            return;
+        }
+
+        connection.query(
+                String.format(
+                        "SELECT " +
+                            "Users.UserID, " +
+                            "Users.Username AS UserUsername, " +
+                            "Users.Forename AS UserForename, " +
+                            "Users.Surname AS UserSurname, " +
+                            "Users.Email AS UserEmail, " +
+                            "Users.AreaCode AS UserAreaCode, " +
+                            "Users.SubscriberNumber AS UserSubscriberNumber, " +
+                            "Users.Token AS UserToken, " +
+                            "Users.ImageID AS UserImageID, " +
+                            "Countries.CountryID, " +
+                            "Countries.Name AS CountryName, " +
+                            "Countries.Abbreviation AS CountryAbbreviation, " +
+                            "Countries.CallingCode AS CountryCallingCode " +
+                        "FROM Users " +
+                            "INNER JOIN Countries " +
+                                "ON Countries.CountryID = Users.CountryID " +
+                        "WHERE Users.Username IN (%s);",
+                        usernames.stream()
+                                .map(str -> '\'' + str + '\'')
+                                .collect(Collectors.joining(","))),
+                usersRes -> {
+                    if (usersRes.failed()) {
+                        handler.handle(Future.failedFuture(usersRes.cause()));
+                        return;
+                    }
+
+                    ResultSet results = usersRes.result();
+                    if (results.getNumRows() != usernames.size()) {
+                        logger.debug("Expecting {} rows; received {}", usernames.size(), results.getNumRows());
+                        handler.handle(Future.failedFuture("One or more usernames were not found"));
+                        return;
+                    }
+
+                    Map<String, User> map = new HashMap<>();
+                    List<User> users = results.getRows().stream()
+                            .map(User::fromJsonObject)
+                            .collect(Collectors.toList());
+                    for (User user : users) {
+                        map.put(user.getUsername(), user);
+                    }
+                    handler.handle(Future.succeededFuture(map));
+                });
+    }
+
     public static void retrieveProfilePicture(JsonObject row,
                                               SQLConnection connection,
                                               Handler<AsyncResult<User>> handler) {
@@ -316,7 +375,8 @@ public class User extends PublicUser {
                                     handler.handle(Future.succeededFuture(user));
                                 }
                                 else {
-                                    handler.handle(Future.failedFuture(res.cause()));
+                                    logger.error("Failed to insert user", res.cause());
+                                    handler.handle(Future.failedFuture("Backend failure"));
                                 }
                             });
                 }
@@ -337,5 +397,20 @@ public class User extends PublicUser {
         }
 
         // we don't really care what the type of image is; we can convert it to JPG
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == this) return true;
+        if (o == null || o.getClass() != getClass()) return false;
+
+        User user = (User) o;
+
+        return getId() == user.getId();
+    }
+
+    @Override
+    public int hashCode() {
+        return getId();
     }
 }

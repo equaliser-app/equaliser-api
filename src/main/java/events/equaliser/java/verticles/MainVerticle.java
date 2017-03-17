@@ -1,10 +1,11 @@
-package events.equaliser.java;
+package events.equaliser.java.verticles;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.twilio.Twilio;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.handlers.Auth;
 import events.equaliser.java.handlers.Fixtures;
+import events.equaliser.java.handlers.Group;
 import events.equaliser.java.handlers.Series;
 import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.geography.Country;
@@ -14,10 +15,7 @@ import events.equaliser.java.util.Hex;
 import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Request;
 import events.equaliser.java.util.TriConsumer;
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
+import io.vertx.core.*;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
@@ -46,6 +44,13 @@ public class MainVerticle extends AbstractVerticle {
 
     private static final Logger logger = LoggerFactory.getLogger(MainVerticle.class);
 
+    private static final List<Verticle> VERTICLES = Arrays.asList(
+            new PrimaryPoolVerticle(),
+            new SecondaryPoolVerticle(),
+            new OfferIssueVerticle(),
+            new OfferReclaimVerticle(),
+            new TicketNotificationVerticle());
+
     private static final int KB = 1024;
     private static final int MB = 1024 * KB;
 
@@ -53,12 +58,10 @@ public class MainVerticle extends AbstractVerticle {
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
+        client = MySQLClient.createShared(vertx,
+                config().getJsonObject("database"), MainVerticle.class.getCanonicalName());
 
-        JsonObject config = config();
-
-        client = MySQLClient.createShared(vertx, config.getJsonObject("database"));
-
-        JsonObject twilio = config.getJsonObject("twilio");
+        JsonObject twilio = config().getJsonObject("twilio");
         Twilio.init(
                 twilio.getString("sid"),
                 twilio.getString("authToken"));
@@ -106,19 +109,41 @@ public class MainVerticle extends AbstractVerticle {
 
         router.get("/auth/ephemeral").handler(
                 routingContext -> databaseHandler(routingContext, Auth::getAuthEphemeral));
+        router.post("/group/create").handler(
+                routingContext -> databaseJsonHandler(routingContext, Group::postCreate));
+        router.post("/group/:id/tiers").handler(
+                routingContext -> databaseJsonHandler(routingContext, Group::postTiers));
+        router.post("/group/:id/pay").handler(
+                routingContext -> databaseJsonHandler(routingContext, Group::postPay));
+        router.get("/group/:id").handler(
+                routingContext -> databaseJsonHandler(routingContext, Group::getId));
 
-        final int listenPort = config().getJsonObject("webserver").getInteger("port");
-        HttpServer server = vertx.createHttpServer();
-        server.requestHandler(router::accept).listen(listenPort, handler -> {
-            if (!handler.succeeded()) {
-                logger.error("Failed to listen on port {}", listenPort);
+        List<Future> futures = new ArrayList<>();
+        for (Verticle verticle : VERTICLES) {
+            Future<String> future = Future.future();
+            vertx.deployVerticle(verticle, new DeploymentOptions().setConfig(config()), future.completer());
+            futures.add(future);
+        }
+        CompositeFuture.all(futures).setHandler(launched -> {
+            if (launched.failed()) {
+                logger.error("Failed to launch one or more verticles", launched.cause());
+            }
+            else {
+                int listenPort = config()
+                        .getJsonObject("webserver")
+                        .getInteger("port");
+                HttpServer server = vertx.createHttpServer();
+                server.requestHandler(router::accept).listen(listenPort, handler -> {
+                    if (!handler.succeeded()) {
+                        logger.error("Failed to listen on port {}", listenPort);
+                    }
+                    startFuture.complete();
+                });
             }
         });
-
-        super.start(startFuture);
     }
 
-    // REMEMBER TO CLOSE THE CONNECTION WHEN YOU'RE FINISHED WITH IT!
+    // REMEMBER TO CLOSE THE CONNECTION WHEN YOU'VE FINISHED WITH IT!
     private void databaseHandler(RoutingContext context,
                                  BiConsumer<RoutingContext, SQLConnection> consumer) {
         client.getConnection(connection -> {
@@ -187,7 +212,6 @@ public class MainVerticle extends AbstractVerticle {
             if (data.succeeded()) {
                 List<Country> countries = data.result();
                 JsonNode node = Json.MAPPER.convertValue(countries, JsonNode.class);
-                // TODO use id => country dict instead of list
                 handler.handle(Future.succeededFuture(node));
             } else {
                 handler.handle(Future.failedFuture(data.cause()));

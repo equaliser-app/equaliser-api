@@ -36,7 +36,7 @@ public class Request {
     }
 
     public static Map<String, String> parseData(HttpServerRequest request, List<String> names,
-                                                 BiFunction<HttpServerRequest, String, String> retriever) {
+                                                BiFunction<HttpServerRequest, String, String> retriever) {
         Map<String, String> fields = new HashMap<>();
         for (String name : names) {
             String value = retriever.apply(request, name);  // POST (getFormAttribute()) or GET (getParam())
@@ -64,7 +64,7 @@ public class Request {
     }
 
     public static void writeErrorResponse(HttpServerResponse response, String message) {
-        writeResponse(response, errorResponse(message), 500);
+        writeResponse(response, errorResponse(message), 400);
     }
 
     public static void writeResponse(HttpServerResponse response, JsonNode node, int statusCode) {

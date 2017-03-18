@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.twilio.Twilio;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.handlers.*;
-import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.user.PublicUser;
-import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Hex;
 import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Request;
@@ -20,7 +18,6 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.asyncsql.AsyncSQLClient;
 import io.vertx.ext.asyncsql.MySQLClient;
 import io.vertx.ext.sql.SQLConnection;
-import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
@@ -28,12 +25,6 @@ import io.vertx.ext.web.handler.StaticHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.BiConsumer;
 
@@ -91,7 +82,7 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseJsonHandler(routingContext, this::getUsernames));
 
         router.post("/register").handler(
-                routingContext -> databaseJsonHandler(routingContext, this::postRegister));
+                routingContext -> databaseJsonHandler(routingContext, Account::postRegister));
 
         router.post("/auth/first").handler(
                 routingContext -> databaseJsonHandler(routingContext, Auth::postAuthFirst));
@@ -247,77 +238,6 @@ public class MainVerticle extends AbstractVerticle {
                     handler.handle(Future.failedFuture(queryRes.cause()));
                 }
             });
-        } catch (IllegalArgumentException e) {
-            handler.handle(Future.failedFuture(e.getMessage()));
-        }
-    }
-
-    private void postRegister(RoutingContext context,
-                              SQLConnection connection,
-                              Handler<AsyncResult<JsonNode>> handler) {
-        Set<FileUpload> files = context.fileUploads();
-        if (files.size() == 0) {
-            handler.handle(Future.failedFuture("No photo uploaded"));
-            return;
-        }
-        FileUpload photo = files.iterator().next();
-        if (!photo.contentType().equals("image/jpeg") || !photo.fileName().endsWith(".jpg")) {
-            handler.handle(Future.failedFuture("Image must be a JPEG"));
-            return;
-        }
-
-        HttpServerRequest request = context.request();
-        List<String> fields = Arrays.asList("username", "countryId", "forename", "surname", "email", "areaCode",
-                "subscriberNumber", "password");
-        try {
-            Map<String, String> parsed = Request.parseData(request, fields, Request::getFormAttribute);
-            int countryId = Integer.parseInt(parsed.get("countryId"));
-
-            // parameters are all there; now ensure the image is acceptable
-            vertx.executeBlocking(code -> {
-                try {
-                    logger.debug("Uploaded file: {}, {} bytes",
-                            photo.uploadedFileName(), photo.size());
-                    BufferedImage image = ImageIO.read(new File(photo.uploadedFileName()));
-                    Files.delete(Paths.get(photo.uploadedFileName()));
-                    if (image == null) {
-                        code.fail("Unreadable image");
-                    }
-                    else {
-                        User.validateProfilePhoto(image);
-                        code.complete(image);
-                    }
-                } catch (IOException e) {
-                    code.fail(e);
-                }
-            }, codeRes -> {
-                if (codeRes.failed()) {
-                    handler.handle(Future.failedFuture(codeRes.cause()));
-                    return;
-                }
-
-                BufferedImage image = (BufferedImage)codeRes.result();
-                Country.retrieveById(countryId, connection, countryRes -> {
-                    if (countryRes.failed()) {
-                        handler.handle(Future.failedFuture(countryRes.cause()));
-                        return;
-                    }
-
-                    Country country = countryRes.result();
-                    logger.debug("Identified {}", country);
-                    User.register(
-                            parsed.get("username"),
-                            country, parsed.get("forename"), parsed.get("surname"),
-                            parsed.get("email"),
-                            parsed.get("areaCode"), parsed.get("subscriberNumber"),
-                            parsed.get("password"),
-                            image,
-                            connection,
-                            registerRes -> TwoFactorToken.initiateTwoFactor(connection, registerRes, handler));
-                });
-            });
-        } catch (NumberFormatException e) {
-            handler.handle(Future.failedFuture("'countryId' must be numeric"));
         } catch (IllegalArgumentException e) {
             handler.handle(Future.failedFuture(e.getMessage()));
         }

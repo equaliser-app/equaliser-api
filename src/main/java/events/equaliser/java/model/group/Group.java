@@ -1,5 +1,6 @@
 package events.equaliser.java.model.group;
 
+import co.paralleluniverse.fibers.Suspendable;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import events.equaliser.java.model.ticket.Offer;
 import events.equaliser.java.model.user.User;
@@ -12,8 +13,10 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.UpdateResult;
+import io.vertx.ext.sync.Sync;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -232,5 +235,37 @@ public class Group {
                         });
                     });
                 });
+    }
+
+    @Suspendable
+    public static void retrieveByUser(User user,
+                                      SQLConnection connection,
+                                      Handler<AsyncResult<List<Group>>> handler) {
+        JsonArray params = new JsonArray().add(user.getId()).add(user.getId()).add(user.getId());
+        connection.queryWithParams(
+                "SELECT Groups.GroupID " +
+                "FROM PaymentGroupAttendees " +
+                    "INNER JOIN PaymentGroups " +
+                        "ON PaymentGroups.PaymentGroupID = PaymentGroupAttendees.PaymentGroupID " +
+                    "INNER JOIN Groups " +
+                        "ON Groups.GroupID = PaymentGroups.GroupID " +
+                "WHERE Groups.UserID = ? " +
+                    "OR PaymentGroups.UserID = ? " +
+                    "OR PaymentGroupAttendees.UserID = ?;", params, Sync.fiberHandler(groupsRes -> {
+                    if (groupsRes.failed()) {
+                        handler.handle(Future.failedFuture(groupsRes.cause()));
+                        return;
+                    }
+
+                    // TODO do asynchronously
+                    ResultSet resultSet = groupsRes.result();
+                    List<Group> groups = new ArrayList<>();
+                    for (JsonObject row : resultSet.getRows()) {
+                        int groupId = row.getInteger("GroupID");
+                        Group group = Sync.awaitResult(h -> retrieveById(groupId, connection, h));
+                        groups.add(group);
+                    }
+                    handler.handle(Future.succeededFuture(groups));
+                }));
     }
 }

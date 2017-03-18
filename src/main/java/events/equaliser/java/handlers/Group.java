@@ -7,7 +7,6 @@ import events.equaliser.java.model.event.Tier;
 import events.equaliser.java.model.group.PaymentGroup;
 import events.equaliser.java.model.ticket.Offer;
 import events.equaliser.java.model.ticket.Transaction;
-import events.equaliser.java.model.user.PublicUser;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Request;
@@ -22,7 +21,6 @@ import io.vertx.ext.sync.Sync;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.Int;
 
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -392,6 +390,23 @@ public class Group {
                 JsonNode node = Json.MAPPER.convertValue(group, JsonNode.class);
                 handler.handle(Future.succeededFuture(node));
             });
+        });
+    }
+
+    public static void getList(RoutingContext context,
+                               SQLConnection connection,
+                               Handler<AsyncResult<JsonNode>> handler) {
+        Session session = context.get("session");
+        User user = session.getUser();
+        events.equaliser.java.model.group.Group.retrieveByUser(user, connection, groupsRes -> {
+            if (groupsRes.failed()) {
+                handler.handle(Future.failedFuture(groupsRes.cause()));
+                return;
+            }
+
+            List<events.equaliser.java.model.group.Group> groups = groupsRes.result();
+            JsonNode node = Json.MAPPER.convertValue(groups, JsonNode.class);
+            handler.handle(Future.succeededFuture(node));
         });
     }
 }

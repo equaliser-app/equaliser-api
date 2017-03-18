@@ -111,6 +111,8 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseHandler(routingContext, Auth::getAuthEphemeral));
         router.post("/group/create").handler(
                 routingContext -> databaseJsonHandler(routingContext, Group::postCreate));
+        router.get("/group/list").handler(
+                routingContext -> databaseJsonHandler(routingContext, Group::getList));
         router.post("/group/:id/tiers").handler(
                 routingContext -> databaseJsonHandler(routingContext, Group::postTiers));
         router.post("/group/:id/pay").handler(

@@ -5,6 +5,7 @@ import events.equaliser.java.auth.Session;
 import events.equaliser.java.model.auth.SecurityEvent;
 import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.geography.Country;
+import events.equaliser.java.model.user.PublicUser;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Request;
@@ -25,10 +26,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 
 public class Account {
@@ -128,6 +126,28 @@ public class Account {
             });
         } catch (NumberFormatException e) {
             handler.handle(Future.failedFuture("'countryId' must be numeric"));
+        } catch (IllegalArgumentException e) {
+            handler.handle(Future.failedFuture(e.getMessage()));
+        }
+    }
+
+    public static void getUsernames(RoutingContext context,
+                                    SQLConnection connection,
+                                    Handler<AsyncResult<JsonNode>> handler) {
+        HttpServerRequest request = context.request();
+        List<String> fields = Collections.singletonList("query");
+        try {
+            Map<String, String> parsed = Request.parseData(request, fields, Request::getParam);
+            PublicUser.searchByUsername(parsed.get("query"), 5, connection, queryRes -> {
+                if (queryRes.succeeded()) {
+                    List<PublicUser> users = queryRes.result();
+                    JsonNode node = Json.MAPPER.convertValue(users, JsonNode.class);
+                    handler.handle(Future.succeededFuture(node));
+                }
+                else {
+                    handler.handle(Future.failedFuture(queryRes.cause()));
+                }
+            });
         } catch (IllegalArgumentException e) {
             handler.handle(Future.failedFuture(e.getMessage()));
         }

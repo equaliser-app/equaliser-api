@@ -5,7 +5,6 @@ import com.twilio.Twilio;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.handlers.*;
 import events.equaliser.java.model.geography.Country;
-import events.equaliser.java.model.user.PublicUser;
 import events.equaliser.java.util.Hex;
 import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Request;
@@ -79,7 +78,7 @@ public class MainVerticle extends AbstractVerticle {
         router.route("/countries/*").handler(StaticHandler.create()
                 .setWebRoot("countries"));
         router.get("/usernames").handler(
-                routingContext -> databaseJsonHandler(routingContext, this::getUsernames));
+                routingContext -> databaseJsonHandler(routingContext, Account::getUsernames));
 
         router.post("/register").handler(
                 routingContext -> databaseJsonHandler(routingContext, Account::postRegister));
@@ -219,28 +218,6 @@ public class MainVerticle extends AbstractVerticle {
                 handler.handle(Future.failedFuture(data.cause()));
             }
         });
-    }
-
-    private void getUsernames(RoutingContext context,
-                              SQLConnection connection,
-                              Handler<AsyncResult<JsonNode>> handler) {
-        HttpServerRequest request = context.request();
-        List<String> fields = Collections.singletonList("query");
-        try {
-            Map<String, String> parsed = Request.parseData(request, fields, Request::getParam);
-            PublicUser.searchByUsername(parsed.get("query"), 5, connection, queryRes -> {
-                if (queryRes.succeeded()) {
-                    List<PublicUser> users = queryRes.result();
-                    JsonNode node = Json.MAPPER.convertValue(users, JsonNode.class);
-                    handler.handle(Future.succeededFuture(node));
-                }
-                else {
-                    handler.handle(Future.failedFuture(queryRes.cause()));
-                }
-            });
-        } catch (IllegalArgumentException e) {
-            handler.handle(Future.failedFuture(e.getMessage()));
-        }
     }
 
     @Override

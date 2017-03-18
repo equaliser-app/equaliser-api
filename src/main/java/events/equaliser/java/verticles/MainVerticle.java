@@ -252,7 +252,7 @@ public class MainVerticle extends AbstractVerticle {
             return;
         }
         FileUpload photo = files.iterator().next();
-        if (!photo.contentType().equals("image/jpeg")) {
+        if (!photo.contentType().equals("image/jpeg") || !photo.fileName().endsWith(".jpg")) {
             handler.handle(Future.failedFuture("Image must be a JPEG"));
             return;
         }

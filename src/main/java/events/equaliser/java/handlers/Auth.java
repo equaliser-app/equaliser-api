@@ -49,18 +49,22 @@ public class Auth {
                                       SQLConnection connection,
                                       Handler<AsyncResult<JsonNode>> handler) {
         HttpServerRequest request = context.request();
-        byte[] token = Hex.hexToBin(request.getFormAttribute("token"));
-        if (token == null) {
-            handler.handle(Future.failedFuture("'token' param missing"));
-            return;
+        try {
+            byte[] token = Hex.hexToBin(request.getFormAttribute("token"));
+            if (token == null) {
+                handler.handle(Future.failedFuture("'token' param missing"));
+                return;
+            }
+            String code = request.getFormAttribute("code");
+            if (code == null) {
+                handler.handle(Future.failedFuture("'code' param missing"));
+                return;
+            }
+            TwoFactorToken.validate(token, code, connection,
+                    (result) -> validateToken(connection, result, handler));
+        } catch (IllegalArgumentException e) {
+            handler.handle(Future.failedFuture("Invalid 'token' param"));
         }
-        String code = request.getFormAttribute("code");
-        if (code == null) {
-            handler.handle(Future.failedFuture("'code' param missing"));
-            return;
-        }
-        TwoFactorToken.validate(token, code, connection,
-                (result) -> validateToken(connection, result, handler));
     }
 
     public static void getAuthEphemeral(RoutingContext context,

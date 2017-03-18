@@ -189,21 +189,28 @@ public class MainVerticle extends AbstractVerticle {
         }
 
         // we have a token; time to validate it
-        byte[] token = Hex.hexToBin(hexToken);
-        Session.retrieveByToken(token, connection, sessionRes -> connection.close(res -> {
-            if (sessionRes.succeeded()) {
-                Session session = sessionRes.result();
-                logger.debug("Identified session {}", session);
-                context.put("session", session);
-                context.next();
-            }
-            else {
-                Request.writeResponse(
-                        context.response(),
-                        Request.errorResponse(sessionRes.cause().toString()),
-                        401);
-            }
-        }));
+        try {
+            byte[] token = Hex.hexToBin(hexToken);
+            Session.retrieveByToken(token, connection, sessionRes -> connection.close(res -> {
+                if (sessionRes.succeeded()) {
+                    Session session = sessionRes.result();
+                    logger.debug("Identified session {}", session);
+                    context.put("session", session);
+                    context.next();
+                }
+                else {
+                    Request.writeResponse(
+                            context.response(),
+                            Request.errorResponse(sessionRes.cause().toString()),
+                            401);
+                }
+            }));
+        } catch (IllegalArgumentException e) {
+            Request.writeResponse(
+                    context.response(),
+                    Request.errorResponse("Malformed session token"),
+                    400);
+        }
     }
 
     private void getCountries(RoutingContext context,

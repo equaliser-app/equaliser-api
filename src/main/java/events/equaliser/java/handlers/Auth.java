@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import events.equaliser.java.auth.Credentials;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.model.auth.EphemeralToken;
+import events.equaliser.java.model.auth.SecurityEvent;
+import events.equaliser.java.model.auth.SecurityEventType;
 import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Hex;
@@ -13,6 +15,7 @@ import events.equaliser.java.util.Request;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
@@ -61,7 +64,7 @@ public class Auth {
                 return;
             }
             TwoFactorToken.validate(token, code, connection,
-                    (result) -> validateToken(connection, result, handler));
+                    (result) -> validateToken(context, connection, result, handler));
         } catch (IllegalArgumentException e) {
             handler.handle(Future.failedFuture("Invalid 'token' param"));
         }
@@ -73,12 +76,19 @@ public class Auth {
         Session session = context.get("session");
         EphemeralToken.generate(session.getUser(), connection, tokenResult -> connection.close(res -> {
             if (tokenResult.succeeded()) {
-                EphemeralToken token = tokenResult.result();
-                String data = Hex.binToHex(token.getToken());
-                QRCode code = QRCode.from(data).withSize(400, 400);
-                byte[] bytes = code.to(ImageType.PNG).stream().toByteArray();
-                response.putHeader("Content-Type", "image/png");
-                response.end(Buffer.buffer(bytes));
+                SecurityEvent.create(context, new SecurityEventType(
+                        SecurityEventType.EPHEMERAL_TOKEN_REQUEST), connection, eventRes -> {
+                    if (eventRes.failed()) {
+                        logger.error("Failed to insert ephemeral token request security event", eventRes.cause());
+                    }
+
+                    EphemeralToken token = tokenResult.result();
+                    String data = Hex.binToHex(token.getToken());
+                    QRCode code = QRCode.from(data).withSize(400, 400);
+                    byte[] bytes = code.to(ImageType.PNG).stream().toByteArray();
+                    response.putHeader("Content-Type", "image/png");
+                    response.end(Buffer.buffer(bytes));
+                });
             }
             else {
                 Request.writeErrorResponse(response,
@@ -97,10 +107,11 @@ public class Auth {
         }
         byte[] token = Hex.hexToBin(rawToken);
         EphemeralToken.validate(token, connection,
-                (result) -> validateToken(connection, result, handler));
+                (result) -> validateToken(context, connection, result, handler));
     }
 
-    private static void validateToken(SQLConnection connection,
+    private static void validateToken(RoutingContext context,
+                                      SQLConnection connection,
                                       AsyncResult<User> userResult,
                                       Handler<AsyncResult<JsonNode>> result) {
         if (userResult.succeeded()) {
@@ -108,9 +119,17 @@ public class Auth {
             Session.create(user, connection, sessionRes -> {
                 if (sessionRes.succeeded()) {
                     Session session = sessionRes.result();
-                    ObjectNode wrapper = Json.FACTORY.objectNode();
-                    wrapper.set("session", Json.MAPPER.convertValue(session, JsonNode.class));
-                    result.handle(Future.succeededFuture(wrapper));
+                    SecurityEvent.create(context, new SecurityEventType(SecurityEventType.USER_LOGIN),
+                            connection, eventRes -> {
+                        if (eventRes.failed()) {
+                            result.handle(Future.failedFuture(eventRes.cause()));
+                            return;
+                        }
+
+                        ObjectNode wrapper = Json.FACTORY.objectNode();
+                        wrapper.set("session", Json.MAPPER.convertValue(session, JsonNode.class));
+                        result.handle(Future.succeededFuture(wrapper));
+                    });
                 }
                 else {
                     result.handle(Future.failedFuture(sessionRes.cause()));

@@ -368,8 +368,7 @@ public class User extends PublicUser {
                                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, FROM_BASE64(?), ?);",
                             params, res -> {
                                 if (res.succeeded()) {
-                                    UpdateResult userResult = res.result();
-                                    int id = userResult.getKeys().getInteger(0);
+                                    int id = res.result().getKeys().getInteger(0);
                                     User user = new User(id, username, forename, surname, email, country, areaCode,
                                             subscriberNumber, token, photo);
                                     handler.handle(Future.succeededFuture(user));

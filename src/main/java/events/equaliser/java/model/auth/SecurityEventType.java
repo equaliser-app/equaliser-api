@@ -5,6 +5,9 @@ import io.vertx.core.json.JsonObject;
 
 public class SecurityEventType {
 
+    public static final int USER_LOGIN = 1;
+    public static final int EPHEMERAL_TOKEN_REQUEST = 2;
+
     private final int id;
     private final String name;
 
@@ -14,6 +17,21 @@ public class SecurityEventType {
 
     public String getName() {
         return name;
+    }
+
+    private static String getName(int constant) {
+        switch (constant) {
+            case USER_LOGIN:
+                return "user.login";
+            case EPHEMERAL_TOKEN_REQUEST:
+                return "ephemeral_token.request";
+            default:
+                throw new IllegalArgumentException("Invalid constant: " + constant);
+        }
+    }
+
+    public SecurityEventType(int id) {
+        this(id, getName(id));
     }
 
     private SecurityEventType(int id, String name) {

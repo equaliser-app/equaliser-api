@@ -3,10 +3,7 @@ package events.equaliser.java.verticles;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.twilio.Twilio;
 import events.equaliser.java.auth.Session;
-import events.equaliser.java.handlers.Auth;
-import events.equaliser.java.handlers.Fixtures;
-import events.equaliser.java.handlers.Group;
-import events.equaliser.java.handlers.Series;
+import events.equaliser.java.handlers.*;
 import events.equaliser.java.model.auth.TwoFactorToken;
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.user.PublicUser;
@@ -119,6 +116,11 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseJsonHandler(routingContext, Group::postPay));
         router.get("/group/:id").handler(
                 routingContext -> databaseJsonHandler(routingContext, Group::getId));
+
+        router.get("/account/user").handler(
+                routingContext -> databaseJsonHandler(routingContext, Account::getUser));
+        router.get("/account/security-events").handler(
+                routingContext -> databaseJsonHandler(routingContext, Account::getSecurityEvents));
 
         List<Future> futures = new ArrayList<>();
         for (Verticle verticle : VERTICLES) {

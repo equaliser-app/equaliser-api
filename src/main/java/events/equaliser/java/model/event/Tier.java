@@ -1,5 +1,6 @@
 package events.equaliser.java.model.event;
 
+import events.equaliser.java.model.group.Group;
 import events.equaliser.java.util.Json;
 import events.equaliser.java.verticles.PrimaryPoolVerticle;
 import io.vertx.core.AsyncResult;
@@ -216,16 +217,16 @@ public class Tier {
         JsonArray params = new JsonArray().add(seriesId);
         connection.queryWithParams(
                 "SELECT " +
-                    "Fixtures.FixtureID, " +
-                    "Tiers.TierID, " +
-                    "Tiers.Name AS TierName, " +
-                    "Tiers.Price AS TierPrice, " +
-                    "Tiers.Availability AS TierAvailability, " +
-                    "Tiers.ReturnsPolicy AS TierReturnsPolicy " +
-                "FROM Fixtures " +
-                    "INNER JOIN Tiers " +
+                        "Fixtures.FixtureID, " +
+                        "Tiers.TierID, " +
+                        "Tiers.Name AS TierName, " +
+                        "Tiers.Price AS TierPrice, " +
+                        "Tiers.Availability AS TierAvailability, " +
+                        "Tiers.ReturnsPolicy AS TierReturnsPolicy " +
+                        "FROM Fixtures " +
+                        "INNER JOIN Tiers " +
                         "ON Tiers.FixtureID = Fixtures.FixtureID " +
-                "WHERE Fixtures.SeriesID = ?;",
+                        "WHERE Fixtures.SeriesID = ?;",
                 params, tiers -> {
                     if (tiers.succeeded()) {
                         ResultSet resultSet = tiers.result();
@@ -246,7 +247,7 @@ public class Tier {
                                         return;
                                     }
 
-                                    JsonObject map = (JsonObject)reply.result().body();
+                                    JsonObject map = (JsonObject) reply.result().body();
                                     Map<Integer, List<Tier>> fixtureTiers = new HashMap<>();
                                     for (JsonObject row : resultSet.getRows()) {
                                         int fixtureId = row.getInteger("FixtureID");
@@ -259,10 +260,58 @@ public class Tier {
                                     }
                                     handler.handle(Future.succeededFuture(fixtureTiers));
                                 });
-                    }
-                    else {
+                    } else {
                         handler.handle(Future.failedFuture(tiers.cause()));
                     }
+                });
+    }
+
+    public static void retrieveByGroup(Group group,
+                                       SQLConnection connection,
+                                       Handler<AsyncResult<List<Tier>>> handler) {
+        JsonArray params = new JsonArray().add(group.getId());
+        connection.queryWithParams(
+                "SELECT " +
+                    "Tiers.FixtureID, " +
+                    "Tiers.TierID, " +
+                    "Tiers.Name AS TierName, " +
+                    "Tiers.Price AS TierPrice, " +
+                    "Tiers.Availability AS TierAvailability, " +
+                    "Tiers.ReturnsPolicy AS TierReturnsPolicy " +
+                "FROM GroupTiers " +
+                    "INNER JOIN Tiers " +
+                        "ON Tiers.TierID = GroupTiers.TierID " +
+                "WHERE GroupTiers.GroupID = ? " +
+                "ORDER BY GroupTiers.Rank ASC;",
+                params, tiersRes -> {
+                    if (tiersRes.failed()) {
+                        handler.handle(Future.failedFuture(tiersRes.cause()));
+                        return;
+                    }
+
+                    ResultSet resultSet = tiersRes.result();
+                    List<Integer> tierIds = resultSet.getRows().stream()
+                            .map(object -> object.getInteger("TierID"))
+                            .collect(Collectors.toList());
+
+                    EventBus eb = Vertx.currentContext().owner().eventBus();
+                    eb.send(PrimaryPoolVerticle.PRIMARY_POOL_AVAILABILITY_MULTIPLE_ADDRESS,
+                            new JsonArray(tierIds), replyRes -> {
+                                if (replyRes.failed()) {
+                                    handler.handle(Future.failedFuture(replyRes.cause()));
+                                    return;
+                                }
+
+                                JsonObject map = (JsonObject)replyRes.result().body();
+                                List<Tier> tiers = new ArrayList<>();
+                                for (JsonObject row : resultSet.getRows()) {
+                                    Tier tier = fromJsonObject(row);
+                                    tier.setAvailable(map.getInteger(Integer.toString(tier.getId())) > 0);
+                                    tiers.add(tier);
+                                }
+
+                                handler.handle(Future.succeededFuture(tiers));
+                            });
                 });
     }
 }

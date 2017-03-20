@@ -1,6 +1,7 @@
 package events.equaliser.java.model.ticket;
 
 import co.paralleluniverse.fibers.Suspendable;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.twilio.rest.api.v2010.account.Message;
 import events.equaliser.java.model.event.Tier;
 import events.equaliser.java.model.group.Group;
@@ -43,6 +44,7 @@ public class Offer {
         return id;
     }
 
+    @JsonBackReference
     public Group getGroup() {
         return group;
     }

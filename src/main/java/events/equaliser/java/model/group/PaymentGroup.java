@@ -1,5 +1,6 @@
 package events.equaliser.java.model.group;
 
+import co.paralleluniverse.fibers.Suspendable;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import events.equaliser.java.model.ticket.Offer;
 import events.equaliser.java.model.user.User;
@@ -9,6 +10,8 @@ import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.SQLConnection;
+import io.vertx.ext.sql.UpdateResult;
+import io.vertx.ext.sync.Sync;
 
 import java.util.*;
 
@@ -74,62 +77,35 @@ public class PaymentGroup {
         return String.format("PaymentGroup(%d, %s, %d attendees)", getId(), getPayee(), getAttendees().size());
     }
 
+    @Suspendable
     public static void create(Group parent,
                               Map<User, Set<User>> paymentGroups,
                               SQLConnection connection,
                               Handler<AsyncResult<Group>> handler) {
-        StringBuilder groupsQuery = new StringBuilder(
-                "INSERT INTO PaymentGroups (GroupID, UserID) " +
-                        "VALUES ");
-        int i = 0;
+        List<PaymentGroup> groups = new ArrayList<>();
         for (Map.Entry<User, Set<User>> entry : paymentGroups.entrySet()) {
-            groupsQuery.append(String.format("(%d, %d)", parent.getId(), entry.getKey().getId()));
-            if (i != paymentGroups.size() - 1) {
-                groupsQuery.append(',');
+            JsonArray groupParams = new JsonArray()
+                    .add(parent.getId())
+                    .add(entry.getKey().getId());
+            UpdateResult result = Sync.awaitResult(
+                    h -> connection.updateWithParams(
+                            "INSERT INTO PaymentGroups (GroupID, UserID) VALUES (?, ?);", groupParams, h));
+            int paymentGroupId = result.getKeys().getInteger(0);
+
+            for (User user : entry.getValue()) {
+                JsonArray attendeeParams = new JsonArray()
+                        .add(paymentGroupId)
+                        .add(user.getId());
+                result = Sync.awaitResult(
+                        h -> connection.updateWithParams(
+                                "INSERT INTO PaymentGroupAttendees (PaymentGroupID, UserID) VALUES (?, ?);",
+                                attendeeParams, h));
             }
-            i++;
+
+            groups.add(new PaymentGroup(paymentGroupId, entry.getKey(), entry.getValue()));
         }
-        String groupsStatement = groupsQuery.toString();
-        connection.update(groupsStatement, groupsRes -> {
-            if (groupsRes.failed()) {
-                handler.handle(Future.failedFuture(groupsRes.cause()));
-                return;
-            }
-
-            List<PaymentGroup> groups = new ArrayList<>();
-            JsonArray keys = groupsRes.result().getKeys();
-
-            StringBuilder attendeesQuery = new StringBuilder(
-                    "INSERT INTO PaymentGroupAttendees (PaymentGroupID, UserID) " +
-                            "VALUES ");
-            int j = 0;
-            for (Map.Entry<User, Set<User>> entry : paymentGroups.entrySet()) {
-                int paymentGroupId = keys.getInteger(j);
-                groups.add(new PaymentGroup(paymentGroupId, entry.getKey(), entry.getValue()));
-                int k = 0;
-                for (User user : entry.getValue()) {
-                    attendeesQuery.append(String.format("(%d, %d)", paymentGroupId, user.getId()));
-                    if (k != entry.getValue().size() - 1) {
-                        attendeesQuery.append(',');
-                    }
-                    k++;
-                }
-                if (j != paymentGroups.entrySet().size() - 1) {
-                    attendeesQuery.append(',');
-                }
-                j++;
-            }
-            String attendeesStatement = attendeesQuery.toString();
-            connection.update(attendeesStatement, attendeesRes -> {
-                if (attendeesRes.failed()) {
-                    handler.handle(Future.failedFuture(attendeesRes.cause()));
-                    return;
-                }
-
-                parent.setPaymentGroups(groups);
-                handler.handle(Future.succeededFuture(parent));
-            });
-        });
+        parent.setPaymentGroups(groups);
+        handler.handle(Future.succeededFuture(parent));
     }
 
     /**

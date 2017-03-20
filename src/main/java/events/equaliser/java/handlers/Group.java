@@ -1,5 +1,6 @@
 package events.equaliser.java.handlers;
 
+import co.paralleluniverse.fibers.Suspendable;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import events.equaliser.java.auth.Session;
@@ -59,8 +60,6 @@ public class Group {
                 return;
             }
             logger.debug("Guests: {}", guests);
-
-
 
             Tier.retrieveById(tierId, connection, tierRes -> {
                 if (tierRes.failed()) {
@@ -163,7 +162,8 @@ public class Group {
                                                 paymentGroups.get(leader).size(),
                                         paymentGroups.size());
 
-                                events.equaliser.java.model.group.Group.create(leader, connection, groupRes -> {
+                                events.equaliser.java.model.group.Group.create(
+                                        leader, tier.getFixture(), connection, Sync.fiberHandler(groupRes -> {
                                     if (groupRes.failed()) {
                                         handler.handle(Future.failedFuture("Failed to create a new group"));
                                         return;
@@ -178,55 +178,57 @@ public class Group {
 
                                         events.equaliser.java.model.group.Group group = groupsRes.result();
 
-                                        EventBus eb = Vertx.currentContext().owner().eventBus();
-                                        eb.send(PrimaryPoolVerticle.PRIMARY_POOL_RESERVE_ADDRESS,
-                                                new JsonObject()
-                                                        .put("tierId", tier.getId())
-                                                        .put("count", group.getSize()),
-                                                reserveRes -> {
-                                            if (reserveRes.failed()) {
-                                                // could also just use the waiting list...
-                                                handler.handle(Future.failedFuture(reserveRes.cause()));
+                                        Map<Integer, Integer> ranks = new HashMap<>();
+                                        ranks.put(tier.getId(), 1);
+                                        group.setTiers(ranks, connection, rankRes -> {
+                                            if (rankRes.failed()) {
+                                                handler.handle(Future.failedFuture(rankRes.cause()));
                                                 return;
                                             }
 
-                                            JsonObject reply = (JsonObject)reserveRes.result().body();
+                                            EventBus eb = Vertx.currentContext().owner().eventBus();
+                                            eb.send(PrimaryPoolVerticle.PRIMARY_POOL_RESERVE_ADDRESS,
+                                                    new JsonObject()
+                                                            .put("tierId", tier.getId())
+                                                            .put("count", group.getSize()),
+                                                    reserveRes -> {
+                                                        if (reserveRes.failed()) {
+                                                            // could also just use the waiting list...
+                                                            handler.handle(Future.failedFuture(reserveRes.cause()));
+                                                            return;
+                                                        }
 
-                                            if (!reply.getBoolean("success")) {
-                                                // tickets unavailable; client should ask for additional tiers
-                                                Map<Integer, Integer> ranks = new HashMap<>();
-                                                ranks.put(tier.getId(), 1);
-                                                group.insertAdditionalTiers(ranks, connection, rankRes -> {
-                                                    if (rankRes.failed()) {
-                                                        handler.handle(Future.failedFuture(rankRes.cause()));
-                                                        return;
-                                                    }
+                                                        JsonObject reply = (JsonObject)reserveRes.result().body();
 
-                                                    ObjectNode wrapper = Json.FACTORY.objectNode();
-                                                    wrapper.set("tier", Json.MAPPER.convertValue(tier, JsonNode.class));
-                                                    handler.handle(Future.succeededFuture(wrapper));
-                                                });
-                                            }
-                                            else {
-                                                // tickets reserved; create offer
-                                                Offer.create(group, tier, connection, Sync.fiberHandler(offerRes -> {
-                                                    if (offerRes.failed()) {
-                                                        handler.handle(Future.failedFuture(offerRes.cause()));
-                                                        return;
-                                                    }
+                                                        if (!reply.getBoolean("success")) {
+                                                            // tickets unavailable; client should ask for additional tiers
+                                                            ObjectNode wrapper = Json.FACTORY.objectNode();
+                                                            wrapper.set("group", Json.MAPPER.convertValue(group, JsonNode.class));
+                                                            wrapper.set("tier", Json.MAPPER.convertValue(tier, JsonNode.class));
+                                                            handler.handle(Future.succeededFuture(wrapper));
+                                                        }
+                                                        else {
+                                                            // tickets reserved; create offer
+                                                            Offer.create(group, tier, connection, Sync.fiberHandler(offerRes -> {
+                                                                if (offerRes.failed()) {
+                                                                    handler.handle(Future.failedFuture(offerRes.cause()));
+                                                                    return;
+                                                                }
 
-                                                    Offer offer = offerRes.result();
-                                                    offer.sendNotificationsSync(connection);
+                                                                Offer offer = offerRes.result();
+                                                                offer.sendNotificationsSync(connection);
 
-                                                    // client should proceed to payment
-                                                    ObjectNode wrapper = Json.FACTORY.objectNode();
-                                                    wrapper.set("offer", Json.MAPPER.convertValue(offer, JsonNode.class));
-                                                    handler.handle(Future.succeededFuture(wrapper));
-                                                }));
-                                            }
+                                                                // client should proceed to payment
+                                                                ObjectNode wrapper = Json.FACTORY.objectNode();
+                                                                wrapper.set("group", Json.MAPPER.convertValue(group, JsonNode.class));
+                                                                wrapper.set("offer", Json.MAPPER.convertValue(offer, JsonNode.class));
+                                                                handler.handle(Future.succeededFuture(wrapper));
+                                                            }));
+                                                        }
+                                                    });
                                         });
                                     });
-                                });
+                                }));
                             });
                 });
             });
@@ -283,7 +285,7 @@ public class Group {
                     return;
                 }
 
-                group.insertAdditionalTiers(ranks, connection, ranksRes -> {
+                group.setTiers(ranks, connection, ranksRes -> {
                     if (ranksRes.failed()) {
                         handler.handle(Future.failedFuture(ranksRes.cause()));
                         return;
@@ -381,32 +383,33 @@ public class Group {
                 }
 
                 events.equaliser.java.model.group.Group group = groupRes.result();
-                Session session = context.get("session");
-                User user = session.getUser();
-                if (!group.getLeader().equals(user)) {
-                    handler.handle(Future.failedFuture("Only the group leader can view the group"));
-                    return;
-                }
                 JsonNode node = Json.MAPPER.convertValue(group, JsonNode.class);
                 handler.handle(Future.succeededFuture(node));
             });
         });
     }
 
+    @Suspendable
     public static void getList(RoutingContext context,
                                SQLConnection connection,
                                Handler<AsyncResult<JsonNode>> handler) {
         Session session = context.get("session");
         User user = session.getUser();
-        events.equaliser.java.model.group.Group.retrieveByUser(user, connection, groupsRes -> {
+        events.equaliser.java.model.group.Group.retrieveByUser(user, connection, Sync.fiberHandler(groupsRes -> {
             if (groupsRes.failed()) {
                 handler.handle(Future.failedFuture(groupsRes.cause()));
                 return;
             }
 
             List<events.equaliser.java.model.group.Group> groups = groupsRes.result();
+            logger.debug("Retrieved {} groups", groups.size());
+            for (events.equaliser.java.model.group.Group group : groups) {
+                Optional<Offer> offer = Sync.awaitResult(h -> Offer.retrieveByGroup(group, connection, h));
+                offer.ifPresent(group::setOffer);
+            }
+
             JsonNode node = Json.MAPPER.convertValue(groups, JsonNode.class);
             handler.handle(Future.succeededFuture(node));
-        });
+        }));
     }
 }

@@ -58,6 +58,7 @@ public class MainVerticle extends AbstractVerticle {
         router.route().handler(context -> {
             HttpServerRequest request = context.request();
             logger.info("{} {}", request.method(), request.uri());
+            context.response().putHeader("Access-Control-Allow-Origin", "*");
             context.next();
         });
         router.route("/images/*").handler(StaticHandler.create()
@@ -89,6 +90,9 @@ public class MainVerticle extends AbstractVerticle {
                 routingContext -> databaseJsonHandler(routingContext, Auth::postAuthSecond));
         router.post("/auth/ephemeral").handler(
                 routingContext -> databaseJsonHandler(routingContext, Auth::postAuthEphemeral));
+
+        router.get("/demo/add-availability/:id/:quantity").handler(
+                routingContext -> databaseJsonHandler(routingContext, Fixtures::getAddAvailability));
 
         // all endpoints past this point require authentication
         router.route().handler(
@@ -193,7 +197,7 @@ public class MainVerticle extends AbstractVerticle {
                 else {
                     Request.writeResponse(
                             context.response(),
-                            Request.errorResponse(sessionRes.cause().toString()),
+                            Request.errorResponse(sessionRes.cause().getMessage()),
                             401);
                 }
             }));

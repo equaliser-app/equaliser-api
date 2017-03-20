@@ -119,6 +119,7 @@ public class Auth {
             Session.create(user, connection, sessionRes -> {
                 if (sessionRes.succeeded()) {
                     Session session = sessionRes.result();
+                    context.put("session", session);  // so security event can read it in the next step
                     SecurityEvent.create(context, new SecurityEventType(SecurityEventType.USER_LOGIN),
                             connection, eventRes -> {
                         if (eventRes.failed()) {

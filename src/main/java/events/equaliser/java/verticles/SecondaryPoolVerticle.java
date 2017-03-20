@@ -25,7 +25,7 @@ public class SecondaryPoolVerticle extends PrimaryPoolVerticle {
     static final String SECONDARY_POOL_AVAILABILITY_ALL_ADDRESS = "secondary_pool.availability_all";
     static final String SECONDARY_POOL_AVAILABILITY_MULTIPLE_ADDRESS = "secondary_pool.availability_multiple";
     static final String SECONDARY_POOL_RESERVE_ADDRESS = "secondary_pool.reserve";
-    static final String SECONDARY_POOL_RECOVER_ADDRESS = "secondary_pool.recover";
+    public static final String SECONDARY_POOL_RECOVER_ADDRESS = "secondary_pool.recover";
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
@@ -97,7 +97,7 @@ public class SecondaryPoolVerticle extends PrimaryPoolVerticle {
     /**
      * Re-add tickets to a tier, for example if an offer has expired.
      *
-     * @param availability Available ticket counts.
+     * @param availability Tier -> reclaim amounts.
      * @param message The incoming message containing the tier and the number of tickets to add.
      */
     protected void recover(Map<Integer, Integer> availability,

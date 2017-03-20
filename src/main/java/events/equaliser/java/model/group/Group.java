@@ -2,6 +2,9 @@ package events.equaliser.java.model.group;
 
 import co.paralleluniverse.fibers.Suspendable;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import events.equaliser.java.model.event.Fixture;
+import events.equaliser.java.model.event.Tier;
 import events.equaliser.java.model.ticket.Offer;
 import events.equaliser.java.model.user.User;
 import events.equaliser.java.util.Time;
@@ -14,6 +17,8 @@ import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.UpdateResult;
 import io.vertx.ext.sync.Sync;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -24,11 +29,16 @@ import java.util.Optional;
 
 public class Group {
 
+    private static final Logger logger = LoggerFactory.getLogger(Group.class);
+
     private final int id;
     private final User leader;
+    private final Fixture fixture;
     private final OffsetDateTime created;
     private final Status status;
     private List<PaymentGroup> paymentGroups;
+    private List<Tier> tiers; // the group is/was waiting for
+    private Offer offer;
 
     public enum Status {
         WAITING("In the waiting list for requested tiers; these tiers can still be modified"),
@@ -51,6 +61,10 @@ public class Group {
 
     public User getLeader() {
         return leader;
+    }
+
+    public Fixture getFixture() {
+        return fixture;
     }
 
     public OffsetDateTime getCreated() {
@@ -78,7 +92,23 @@ public class Group {
         this.paymentGroups = paymentGroups;
     }
 
-    @JsonIgnore
+    public List<Tier> getTiers() {
+        return tiers;
+    }
+
+    public void setTiers(List<Tier> tiers) {
+        this.tiers = tiers;
+    }
+
+    @JsonManagedReference
+    public Offer getOffer() {
+        return offer;
+    }
+
+    public void setOffer(Offer offer) {
+        this.offer = offer;
+    }
+
     public int getSize() {
         if (getPaymentGroups() == null) {
             return 0;
@@ -87,13 +117,14 @@ public class Group {
         return getPaymentGroups().stream().mapToInt(PaymentGroup::getSize).sum();
     }
 
-    private Group(int id, User leader, OffsetDateTime created) {
-        this(id, leader, created, Status.WAITING);
+    private Group(int id, User leader, Fixture fixture, OffsetDateTime created) {
+        this(id, leader, fixture, created, Status.WAITING);
     }
 
-    private Group(int id, User leader, OffsetDateTime created, Status status) {
+    private Group(int id, User leader, Fixture fixture, OffsetDateTime created, Status status) {
         this.id = id;
         this.leader = leader;
+        this.fixture = fixture;
         this.created = created;
         this.status = status;
     }
@@ -110,24 +141,26 @@ public class Group {
      * @param json The JSON object with correct keys.
      * @return The Group representation of the object.
      */
-    public static Group fromJsonObject(JsonObject json) {
+    public static Group fromJsonObject(JsonObject json, Fixture fixture) {
         return new Group(
                 json.getInteger("GroupID"),
                 User.fromJsonObject(json),
+                fixture,
                 Time.parseOffsetDateTime(json.getString("GroupCreated")),
                 json.getInteger("OfferID") == null ? Status.WAITING : Status.OFFER);
     }
 
-    public static void create(User leader,
+    public static void create(User leader, Fixture fixture,
                               SQLConnection connection,
                               Handler<AsyncResult<Group>> handler) {
         OffsetDateTime created = OffsetDateTime.now();
         JsonArray params = new JsonArray()
                 .add(leader.getId())
+                .add(fixture.getId())
                 .add(Time.toSql(created));
         connection.updateWithParams(
-                "INSERT INTO Groups (UserID, Created) " +
-                "VALUES (?, ?);",
+                "INSERT INTO Groups (UserID, FixtureID, Created) " +
+                "VALUES (?, ?, ?);",
                 params, res -> {
                     if (res.failed()) {
                         handler.handle(Future.failedFuture(res.cause()));
@@ -136,7 +169,7 @@ public class Group {
 
                     UpdateResult result = res.result();
                     int id = result.getKeys().getInteger(0);
-                    Group group = new Group(id, leader, created);
+                    Group group = new Group(id, leader, fixture, created);
                     handler.handle(Future.succeededFuture(group));
                 });
     }
@@ -147,25 +180,70 @@ public class Group {
      * @param connection
      * @param handler
      */
-    public void insertAdditionalTiers(Map<Integer, Integer> priorities,
-                                      SQLConnection connection,
-                                      Handler<AsyncResult<Void>> handler) {
-        // TODO check the tiers are all for the same fixture (we don't know which one yet)
+    public void setTiers(Map<Integer, Integer> priorities,
+                         SQLConnection connection,
+                         Handler<AsyncResult<Void>> handler) {
+        logger.debug("New priorities: {}", priorities);
 
-        StringBuilder tiersQuery = new StringBuilder(
-                "INSERT INTO GroupTiers (GroupID, TierID, Rank) " +
-                        "VALUES ");
-        int i = 0;
-        for (Map.Entry<Integer, Integer> entry : priorities.entrySet()) {
-            tiersQuery.append(String.format("(%d, %d, %d)", getId(), entry.getKey(), entry.getValue()));
-            if (i != priorities.size() - 1) {
-                tiersQuery.append(',');
-            }
-            i++;
+        if (priorities.isEmpty()) {
+            handler.handle(Future.failedFuture("At least one tier must be selected"));
+            return;
         }
-        String tiersStatement = tiersQuery.toString();
-        connection.update(tiersStatement, res ->
-                handler.handle(res.succeeded() ? Future.succeededFuture() : Future.failedFuture(res.cause())));
+
+        // TODO check the tiers are all for Groups.FixtureID
+        connection.setAutoCommit(false, autoCommitFalseRes -> {
+            if (autoCommitFalseRes.failed()) {
+                handler.handle(Future.failedFuture(autoCommitFalseRes.cause()));
+                return;
+            }
+
+            connection.updateWithParams(
+                    "DELETE FROM GroupTiers WHERE GroupID = ?;",
+                    new JsonArray().add(getId()), deleteRes -> {
+                        if (deleteRes.failed()) {
+                            handler.handle(Future.failedFuture(deleteRes.cause()));
+                            return;
+                        }
+
+                        StringBuilder tiersQuery = new StringBuilder(
+                                "INSERT INTO GroupTiers (GroupID, TierID, Rank) " +
+                                        "VALUES ");
+                        int i = 0;
+                        for (Map.Entry<Integer, Integer> entry : priorities.entrySet()) {
+                            tiersQuery.append(
+                                    String.format("(%d, %d, %d)", getId(), entry.getKey(), entry.getValue()));
+                            if (i != priorities.size() - 1) {
+                                tiersQuery.append(',');
+                            }
+                            i++;
+                        }
+                        String tiersStatement = tiersQuery.toString();
+
+                        // TODO please let there be some form of chaining handlers that's more elegant than this...
+                        connection.update(tiersStatement, insertRes -> {
+                            if (insertRes.failed()) {
+                                handler.handle(Future.failedFuture(insertRes.cause()));
+                                return;
+                            }
+
+                            connection.commit(commitRes -> {
+                                if (commitRes.failed()) {
+                                    handler.handle(Future.failedFuture(commitRes.cause()));
+                                    return;
+                                }
+
+                                connection.setAutoCommit(true, autoCommitTrueRes -> {
+                                    if (autoCommitFalseRes.failed()) {
+                                        handler.handle(Future.failedFuture(autoCommitFalseRes.cause()));
+                                        return;
+                                    }
+
+                                    handler.handle(Future.succeededFuture());
+                                });
+                            });
+                        });
+                    });
+        });
     }
 
     public static void retrieveById(int id,
@@ -175,6 +253,7 @@ public class Group {
         connection.queryWithParams(
                 "SELECT " +
                     "Groups.GroupID, " +
+                    "Groups.FixtureID, " +
                     "Groups.Created AS GroupCreated, " +
                     "Offers.OfferID, " +  // so we can easily get the status
                     "Users.UserID, " +
@@ -210,28 +289,42 @@ public class Group {
                     }
 
                     JsonObject row = set.getRows().get(0);
-                    Group group = fromJsonObject(row);
-                    Offer.retrieveByGroup(group, connection, offerRes -> {
-                        if (offerRes.failed()) {
-                            handler.handle(Future.failedFuture(offerRes.cause()));
+                    Fixture.retrieveFromId(row.getInteger("FixtureID"), connection, fixtureRes -> {
+                        if (fixtureRes.failed()) {
+                            handler.handle(Future.failedFuture(fixtureRes.cause()));
                             return;
                         }
 
-                        Optional<Offer> offerOptional = offerRes.result();
-                        if (!offerOptional.isPresent()) {
-                            handler.handle(Future.failedFuture("No offer has been made to the group"));
-                            return;
-                        }
-
-                        Offer offer = offerOptional.get();
-                        PaymentGroup.retrieveByGroup(group, offer, connection, groupsRes -> {
-                            if (groupsRes.failed()) {
-                                handler.handle(Future.failedFuture(groupRes.cause()));
+                        Fixture fixture = fixtureRes.result();
+                        Group group = fromJsonObject(row, fixture);
+                        Tier.retrieveByGroup(group, connection, tiersRes -> {
+                            if (tiersRes.failed()) {
+                                handler.handle(Future.failedFuture(tiersRes.cause()));
                                 return;
                             }
+                            List<Tier> tiers = tiersRes.result();
+                            logger.debug("Retrieved {} tiers for group {}", tiers.size(), group.getId());
+                            group.setTiers(tiers);
+                            Offer.retrieveByGroup(group, connection, offerRes -> {
+                                if (offerRes.failed()) {
+                                    handler.handle(Future.failedFuture(offerRes.cause()));
+                                    return;
+                                }
 
-                            group.setPaymentGroups(groupsRes.result());
-                            handler.handle(Future.succeededFuture(group));
+                                Optional<Offer> offerOptional = offerRes.result();
+                                offerOptional.ifPresent(group::setOffer);
+
+                                PaymentGroup.retrieveByGroup(group, offerOptional.orElse(null),
+                                        connection, groupsRes -> {
+                                    if (groupsRes.failed()) {
+                                        handler.handle(Future.failedFuture(groupRes.cause()));
+                                        return;
+                                    }
+
+                                    group.setPaymentGroups(groupsRes.result());
+                                    handler.handle(Future.succeededFuture(group));
+                                });
+                            });
                         });
                     });
                 });
@@ -243,7 +336,7 @@ public class Group {
                                       Handler<AsyncResult<List<Group>>> handler) {
         JsonArray params = new JsonArray().add(user.getId()).add(user.getId()).add(user.getId());
         connection.queryWithParams(
-                "SELECT Groups.GroupID " +
+                "SELECT DISTINCT Groups.GroupID, Groups.Created " +
                 "FROM PaymentGroupAttendees " +
                     "INNER JOIN PaymentGroups " +
                         "ON PaymentGroups.PaymentGroupID = PaymentGroupAttendees.PaymentGroupID " +
@@ -251,7 +344,8 @@ public class Group {
                         "ON Groups.GroupID = PaymentGroups.GroupID " +
                 "WHERE Groups.UserID = ? " +
                     "OR PaymentGroups.UserID = ? " +
-                    "OR PaymentGroupAttendees.UserID = ?;", params, Sync.fiberHandler(groupsRes -> {
+                    "OR PaymentGroupAttendees.UserID = ? " +
+                "ORDER BY Groups.Created DESC;", params, Sync.fiberHandler(groupsRes -> {
                     if (groupsRes.failed()) {
                         handler.handle(Future.failedFuture(groupsRes.cause()));
                         return;

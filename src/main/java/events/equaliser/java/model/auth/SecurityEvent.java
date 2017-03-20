@@ -1,16 +1,20 @@
 package events.equaliser.java.model.auth;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import events.equaliser.java.auth.Session;
 import events.equaliser.java.model.user.User;
+import events.equaliser.java.util.Network;
 import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.web.RoutingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -20,6 +24,8 @@ import java.util.List;
 
 
 public class SecurityEvent {
+
+    private static final Logger logger = LoggerFactory.getLogger(SecurityEvent.class);
 
     private final int id;
     private final SecurityEventType type;
@@ -34,8 +40,14 @@ public class SecurityEvent {
         return type;
     }
 
+    @JsonIgnore
     public InetAddress getIp() {
         return ip;
+    }
+
+    @JsonProperty("ip")
+    private String getIpString() {
+        return getIp().getHostAddress();
     }
 
     public OffsetDateTime getTimestamp() {
@@ -77,7 +89,7 @@ public class SecurityEvent {
             JsonArray params = new JsonArray()
                     .add(type.getId())
                     .add(session.getId())
-                    .add(client.getAddress())
+                    .add(Network.v6Normalise(client))
                     .add(Time.toSql(now));
             connection.updateWithParams(
                     "INSERT INTO SecurityEvents (SecurityEventTypeID, SessionID, IPAddress, Timestamp) " +

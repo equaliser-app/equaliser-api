@@ -4,10 +4,7 @@ import co.paralleluniverse.fibers.Suspendable;
 import events.equaliser.java.model.event.Tier;
 import events.equaliser.java.model.group.Group;
 import events.equaliser.java.model.ticket.Offer;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.VertxException;
+import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonObject;
@@ -25,7 +22,7 @@ import org.slf4j.LoggerFactory;
  * If deemed necessary, this will also process pending refunds to free up more tickets.
  * This verticle is synchronous as it's so procedural.
  */
-public class OfferIssueVerticle extends SyncVerticle {
+public class OfferIssueVerticle extends AbstractVerticle {
 
     private static final Logger logger = LoggerFactory.getLogger(OfferIssueVerticle.class);
 
@@ -34,7 +31,6 @@ public class OfferIssueVerticle extends SyncVerticle {
     private AsyncSQLClient client;
 
     @Override
-    @Suspendable
     public void start(Future<Void> startFuture) throws Exception {
         client = MySQLClient.createShared(vertx,
                 config().getJsonObject("database"),
@@ -59,7 +55,6 @@ public class OfferIssueVerticle extends SyncVerticle {
     }
 
     @Override
-    @Suspendable
     public void stop(Future<Void> stopFuture) throws Exception {
         client.close(handler -> {
             if (handler.succeeded()) {
@@ -71,6 +66,7 @@ public class OfferIssueVerticle extends SyncVerticle {
         });
     }
 
+    @Suspendable
     private void execute(Handler<AsyncResult<Void>> handler) {
 
         client.getConnection(connRes -> {
@@ -108,7 +104,7 @@ public class OfferIssueVerticle extends SyncVerticle {
                             "ON GroupTiers.GroupID = WaitingListAttendees.GroupID " +
                     "ORDER BY " +
                         "WaitingListAttendees.Created ASC, " +
-                        "GroupTiers.Rank ASC;", groupsRes -> connection.close(closeRes -> {
+                        "GroupTiers.Rank ASC;", groupsRes -> connection.close(Sync.fiberHandler(closeRes -> {
                         if (groupsRes.failed()) {
                             handler.handle(Future.failedFuture(groupsRes.cause()));
                             return;
@@ -163,7 +159,7 @@ public class OfferIssueVerticle extends SyncVerticle {
 
                         // TODO check if waiting list is empty; if it still isn't, process applicable refunds
                         //      will have to remove db close
-                    }));
+                    })));
         });
     }
 }

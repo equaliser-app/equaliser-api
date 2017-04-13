@@ -176,10 +176,11 @@ public class Group {
     }
 
     /**
+     * Set the tier rankings for a group.
      *
-     * @param priorities tierId -> rank, where rank 1 is highest. Do not have to be continuous numbers.
-     * @param connection
-     * @param handler
+     * @param priorities A map of tierId -> rank, where rank 1 is highest. Ranks not have to be continuous numbers.
+     * @param connection A database connection.
+     * @param handler The result.
      */
     public void setTiers(Map<Integer, Integer> priorities,
                          SQLConnection connection,

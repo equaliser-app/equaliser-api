@@ -98,6 +98,7 @@ public class PaymentGroup {
                 JsonArray attendeeParams = new JsonArray()
                         .add(paymentGroupId)
                         .add(user.getId());
+                //noinspection UnusedAssignment
                 result = Sync.awaitResult(
                         h -> connection.updateWithParams(
                                 "INSERT INTO PaymentGroupAttendees (PaymentGroupID, UserID) VALUES (?, ?);",

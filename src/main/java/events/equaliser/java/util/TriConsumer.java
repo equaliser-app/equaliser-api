@@ -2,6 +2,12 @@ package events.equaliser.java.util;
 
 import java.util.Objects;
 
+/**
+ * An extension of BiConsumer.
+ * @param <T> The type of the first parameter.
+ * @param <U> The type of the second parameter.
+ * @param <V> The type of the third parameter.
+ */
 @FunctionalInterface
 public interface TriConsumer<T, U, V> {
 

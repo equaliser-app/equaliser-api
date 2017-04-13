@@ -27,9 +27,12 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.function.BiConsumer;
 
-public class MainVerticle extends AbstractVerticle {
+/**
+ * Responsible for responding to requests to the API.
+ */
+public class RestVerticle extends AbstractVerticle {
 
-    private static final Logger logger = LoggerFactory.getLogger(MainVerticle.class);
+    private static final Logger logger = LoggerFactory.getLogger(RestVerticle.class);
 
     private static final List<Verticle> VERTICLES = Arrays.asList(
             new PrimaryPoolVerticle(),
@@ -46,7 +49,7 @@ public class MainVerticle extends AbstractVerticle {
     @Override
     public void start(Future<Void> startFuture) throws Exception {
         client = MySQLClient.createShared(vertx,
-                config().getJsonObject("database"), MainVerticle.class.getCanonicalName());
+                config().getJsonObject("database"), RestVerticle.class.getCanonicalName());
 
         JsonObject twilio = config().getJsonObject("twilio");
         Twilio.init(

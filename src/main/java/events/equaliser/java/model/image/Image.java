@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Represents an image stored in the database.
+ */
 public class Image {
 
     private final int id;

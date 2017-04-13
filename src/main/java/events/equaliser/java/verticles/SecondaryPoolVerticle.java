@@ -17,6 +17,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Manages the pool of returned tickets.
+ */
 public class SecondaryPoolVerticle extends PrimaryPoolVerticle {
 
     private static final Logger logger = LoggerFactory.getLogger(SecondaryPoolVerticle.class);

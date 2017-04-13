@@ -28,11 +28,20 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 
-
+/**
+ * Request handlers related to a user account.
+ */
 public class Account {
 
     private static final Logger logger = LoggerFactory.getLogger(Account.class);
 
+    /**
+     * Retrieve the logged in user's information.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getUser(RoutingContext context,
                                SQLConnection connection,
                                Handler<AsyncResult<JsonNode>> handler) {
@@ -42,6 +51,13 @@ public class Account {
         handler.handle(Future.succeededFuture(node));
     }
 
+    /**
+     * Retrieve the logged in user's security events.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getSecurityEvents(RoutingContext context,
                                          SQLConnection connection,
                                          Handler<AsyncResult<JsonNode>> handler) {
@@ -60,6 +76,13 @@ public class Account {
         });
     }
 
+    /**
+     * Register a new user.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postRegister(RoutingContext context,
                                     SQLConnection connection,
                                     Handler<AsyncResult<JsonNode>> handler) {
@@ -131,6 +154,13 @@ public class Account {
         }
     }
 
+    /**
+     * Retrieve users whose username matches a pattern.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getUsernames(RoutingContext context,
                                     SQLConnection connection,
                                     Handler<AsyncResult<JsonNode>> handler) {

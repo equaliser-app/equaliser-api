@@ -13,7 +13,9 @@ import io.vertx.ext.sql.SQLConnection;
 
 import java.time.OffsetDateTime;
 
-
+/**
+ * Represents a token scanned by the mobile app in order to receive a session token.
+ */
 public class EphemeralToken {
 
     private static final int TOKEN_BYTES = 32;

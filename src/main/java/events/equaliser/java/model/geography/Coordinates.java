@@ -1,6 +1,8 @@
 package events.equaliser.java.model.geography;
 
-
+/**
+ * Represents a 2D location on Earth.
+ */
 public class Coordinates {
 
     private final double latitude;

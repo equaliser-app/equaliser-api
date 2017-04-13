@@ -12,17 +12,37 @@ import org.mindrot.jbcrypt.BCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * Operations related to user credentials.
+ */
 public class Credentials {
 
     private static final Logger logger = LoggerFactory.getLogger(Credentials.class);
 
-    private static final int BCRYPT_ROUNDS = 10;
+    /**
+     * BCrypt will do 2^this number of rounds when calculating the hash.
+     */
+    private static final int BCRYPT_WORK_FACTOR = 10;
 
+    /**
+     * Hash a password.
+     *
+     * @param password The password to hash.
+     * @return The hashed password.
+     */
     public static String hash(String password) {
-        return BCrypt.hashpw(password, BCrypt.gensalt(BCRYPT_ROUNDS));
+        return BCrypt.hashpw(password, BCrypt.gensalt(BCRYPT_WORK_FACTOR));
     }
 
+    /**
+     * Attempt to identify a user by their credentials.
+     *
+     * @param username_email The user's username or email address.
+     * @param password The user's password. 
+     * @param connection A database connection.
+     * @param handler The callback; will be failed if no user could be identified.
+     *                In case of success, the User object will be passed.
+     */
     public static void validate(String username_email,
                                 String password,
                                 SQLConnection connection,

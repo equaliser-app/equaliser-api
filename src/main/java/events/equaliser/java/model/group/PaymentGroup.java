@@ -15,7 +15,9 @@ import io.vertx.ext.sync.Sync;
 
 import java.util.*;
 
-
+/**
+ * Represents a single payment group with its leader and attendees.
+ */
 public class PaymentGroup {
 
     private final int id;

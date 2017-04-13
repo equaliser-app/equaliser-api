@@ -17,6 +17,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.OffsetDateTime;
 
+/**
+ * Represents a temporary token used for validating 2FA requests.
+ */
 public class TwoFactorToken {
 
     private static final Logger logger = LoggerFactory.getLogger(TwoFactorToken.class);

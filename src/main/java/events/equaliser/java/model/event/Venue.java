@@ -6,7 +6,11 @@ import io.vertx.core.json.JsonObject;
 
 import java.awt.Point;
 
+/**
+ * A location where a fixture happens.
+ */
 public class Venue {
+
     private final int id;
     private final Country country;
     private final String name;

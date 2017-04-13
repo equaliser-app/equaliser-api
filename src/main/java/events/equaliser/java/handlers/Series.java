@@ -13,8 +13,18 @@ import io.vertx.ext.web.RoutingContext;
 
 import java.util.List;
 
+/**
+ * Request handlers related to series.
+ */
 public class Series {
 
+    /**
+     * Get a series by its identifier.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getId(RoutingContext context,
                              SQLConnection connection,
                              Handler<AsyncResult<JsonNode>> handler) {
@@ -40,6 +50,13 @@ public class Series {
         }
     }
 
+    /**
+     * Get a list of series matching a tag, used for search.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getByTag(RoutingContext context,
                                 SQLConnection connection,
                                 Handler<AsyncResult<JsonNode>> handler) {
@@ -61,6 +78,13 @@ public class Series {
         }
     }
 
+    /**
+     * Retrieve a list of the most popular or notable events, for prominent display.
+     *
+     * @param context The routing context. Unused.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getShowcase(RoutingContext context,
                                    SQLConnection connection,
                                    Handler<AsyncResult<JsonNode>> handler) {

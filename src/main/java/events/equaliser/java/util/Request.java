@@ -14,16 +14,40 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
 
+/**
+ * Utilities related to processing request parameters/fields and writing responses.
+ */
 public class Request {
 
+    /**
+     * Retrieve a POST field from a request.
+     *
+     * @param request The request to parse.
+     * @param field The field to retrieve.
+     * @return The field's value, or null if not found.
+     */
     public static String getFormAttribute(HttpServerRequest request, String field) {
         return request.getFormAttribute(field);
     }
 
+    /**
+     * Retrieve a GET parameter from a request.
+     *
+     * @param request The request to parse.
+     * @param field The field to retrieve.
+     * @return The field's value, or null if not found.
+     */
     public static String getParam(HttpServerRequest request, String field) {
         return request.getParam(field);
     }
 
+    /**
+     * Validate a field value is non-null and non-empty after trimming.
+     *
+     * @param name The field name, used for error messages.
+     * @param value The field value.
+     * @return The field value on successful validation.
+     */
     public static String validateField(String name, String value) {
         if (value == null) {
             throw new IllegalArgumentException(String.format("'%s' param missing", name));

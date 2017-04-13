@@ -26,7 +26,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-
+/**
+ * Represents a group wanting to attend an event, including a group leader and payment group leaders.
+ */
 public class Group {
 
     private static final Logger logger = LoggerFactory.getLogger(Group.class);

@@ -24,11 +24,29 @@ import java.time.OffsetDateTime;
  */
 public class Session {
 
+    /**
+     * The size of session tokens in bytes.
+     */
     private static final int SESSION_TOKEN_LENGTH = 64;
 
+    /**
+     * The unique session identifier.
+     */
     private final int id;
+
+    /**
+     * The user associated with this session.
+     */
     private final User user;
+
+    /**
+     * When this session was started.
+     */
     private final OffsetDateTime started;
+
+    /**
+     * The session token, of length SESSION_TOKEN_LENGTH.
+     */
     private final byte[] token;
 
     @JsonIgnore
@@ -54,6 +72,13 @@ public class Session {
         return Hex.binToHex(getToken());
     }
 
+    /**
+     * Initialise a new session.
+     * @param id The unique session identifier.
+     * @param user The user associated with this session.
+     * @param started When this session was started.
+     * @param token The session token, of length SESSION_TOKEN_LENGTH.
+     */
     private Session(int id, User user, OffsetDateTime started, byte[] token) {
         this.id = id;
         this.user = user;
@@ -79,6 +104,13 @@ public class Session {
                 json.getBinary("SessionToken"));
     }
 
+    /**
+     * Create a new session for a user.
+     *
+     * @param user The user to associate with the new session.
+     * @param connection An open database connection.
+     * @param handler A result handler that will receive the created session on success.
+     */
     public static void create(User user,
                               SQLConnection connection,
                               Handler<AsyncResult<Session>> handler) {
@@ -105,6 +137,13 @@ public class Session {
 
     }
 
+    /**
+     * Retrieve a session object by its unique identifier.
+     *
+     * @param token The session identifier.
+     * @param connection An open database connection.
+     * @param handler A result handler that will receive the created session on success.
+     */
     public static void retrieveByToken(byte[] token,
                                        SQLConnection connection,
                                        Handler<AsyncResult<Session>> handler) {

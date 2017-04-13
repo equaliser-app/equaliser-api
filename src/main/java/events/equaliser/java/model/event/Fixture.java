@@ -18,6 +18,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A particular event within a series.
+ */
 public class Fixture {
     private final int id;
     private final BareSeries series;

@@ -24,6 +24,9 @@ import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Represents a particular size of an image stored in the database.
+ */
 public class ImageSize {
 
     private static final Logger logger = LoggerFactory.getLogger(ImageSize.class);

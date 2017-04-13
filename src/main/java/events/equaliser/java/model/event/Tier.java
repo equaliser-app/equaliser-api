@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * A class of ticket available for a fixture.
+ */
 public class Tier {
 
     private final int id;

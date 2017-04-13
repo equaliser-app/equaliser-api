@@ -2,7 +2,9 @@ package events.equaliser.java.model.auth;
 
 import io.vertx.core.json.JsonObject;
 
-
+/**
+ * Represents a type of security event, e.g. user login.
+ */
 public class SecurityEventType {
 
     public static final int USER_LOGIN = 1;

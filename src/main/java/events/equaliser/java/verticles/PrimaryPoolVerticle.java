@@ -18,6 +18,9 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Manages the pool of brand new tickets.
+ */
 public class PrimaryPoolVerticle extends AbstractVerticle {
 
     private static final Logger logger = LoggerFactory.getLogger(PrimaryPoolVerticle.class);

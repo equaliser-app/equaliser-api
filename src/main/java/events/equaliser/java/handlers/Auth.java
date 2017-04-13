@@ -15,7 +15,6 @@ import events.equaliser.java.util.Request;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
@@ -26,10 +25,20 @@ import net.glxn.qrgen.javase.QRCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Request handlers related to authentication and login.
+ */
 public class Auth {
 
     private static final Logger logger = LoggerFactory.getLogger(Auth.class);
 
+    /**
+     * The first-stage authentication endpoint, validating a username/email and password pair.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postAuthFirst(RoutingContext context,
                                      SQLConnection connection,
                                      Handler<AsyncResult<JsonNode>> handler) {
@@ -48,6 +57,13 @@ public class Auth {
                 credentials -> TwoFactorToken.initiateTwoFactor(connection, credentials, handler));
     }
 
+    /**
+     * The second-stage authentication endpoint, validating a 2FA code.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postAuthSecond(RoutingContext context,
                                       SQLConnection connection,
                                       Handler<AsyncResult<JsonNode>> handler) {
@@ -70,6 +86,12 @@ public class Auth {
         }
     }
 
+    /**
+     * Generate an ephemeral token for the logged-in user.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     */
     public static void getAuthEphemeral(RoutingContext context,
                                         SQLConnection connection) {
         HttpServerResponse response = context.response();
@@ -97,6 +119,13 @@ public class Auth {
         }));
     }
 
+    /**
+     * Submit an ephemeral token in exchange for a session token.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postAuthEphemeral(RoutingContext context,
                                          SQLConnection connection,
                                          Handler<AsyncResult<JsonNode>> handler) {
@@ -110,10 +139,17 @@ public class Auth {
                 (result) -> validateToken(context, connection, result, handler));
     }
 
+    /**
+     * Helper method to validate a 2FA token.
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param userResult The outcome of attempting to retrieve the authenticated user.
+     * @param handler The result.
+     */
     private static void validateToken(RoutingContext context,
                                       SQLConnection connection,
                                       AsyncResult<User> userResult,
-                                      Handler<AsyncResult<JsonNode>> result) {
+                                      Handler<AsyncResult<JsonNode>> handler) {
         if (userResult.succeeded()) {
             User user = userResult.result();
             Session.create(user, connection, sessionRes -> {
@@ -123,21 +159,21 @@ public class Auth {
                     SecurityEvent.create(context, new SecurityEventType(SecurityEventType.USER_LOGIN),
                             connection, eventRes -> {
                         if (eventRes.failed()) {
-                            result.handle(Future.failedFuture(eventRes.cause()));
+                            handler.handle(Future.failedFuture(eventRes.cause()));
                             return;
                         }
 
                         ObjectNode wrapper = Json.FACTORY.objectNode();
                         wrapper.set("session", Json.MAPPER.convertValue(session, JsonNode.class));
-                        result.handle(Future.succeededFuture(wrapper));
+                        handler.handle(Future.succeededFuture(wrapper));
                     });
                 }
                 else {
-                    result.handle(Future.failedFuture(sessionRes.cause()));
+                    handler.handle(Future.failedFuture(sessionRes.cause()));
                 }
             });
         } else {
-            result.handle(Future.failedFuture(userResult.cause()));
+            handler.handle(Future.failedFuture(userResult.cause()));
         }
     }
 }

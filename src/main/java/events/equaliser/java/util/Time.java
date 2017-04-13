@@ -14,7 +14,9 @@ import java.util.stream.IntStream;
 
 import org.joda.time.DateTime;
 
-
+/**
+ * Methods related to parsing and formatting times and timezones.
+ */
 public class Time {
 
     private static final Map<Long, String> DAYS_LOOKUP =
@@ -61,6 +63,12 @@ public class Time {
         return OffsetDateTime.of(local, ZoneOffset.UTC);
     }
 
+    /**
+     * Get a string representation of an OffsetDateTime that Vert.x's MySQL driver understands.
+     *
+     * @param datetime The datetime object to transform.
+     * @return The transformed object.
+     */
     public static String toSql(OffsetDateTime datetime) {
         return datetime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
     }

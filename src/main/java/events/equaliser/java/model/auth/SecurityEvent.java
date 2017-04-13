@@ -22,7 +22,9 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-
+/**
+ * Represents a single security event, e.g. a user login, or ephemeral token generation.
+ */
 public class SecurityEvent {
 
     private static final Logger logger = LoggerFactory.getLogger(SecurityEvent.class);

@@ -19,8 +19,18 @@ import io.vertx.ext.web.RoutingContext;
 
 import java.awt.*;
 
+/**
+ * Request handlers related to fixtures.
+ */
 public class Fixtures {
 
+    /**
+     * Retrieve a fixture's information by its identifier.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getId(RoutingContext context,
                              SQLConnection connection,
                              Handler<AsyncResult<JsonNode>> handler) {
@@ -45,6 +55,15 @@ public class Fixtures {
         }
     }
 
+    /**
+     * A hack implemented for the inspection to add available tickets to the secondary
+     * pool for a particular tier, in order to demonstrate reaching the front of the
+     * waiting list.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getAddAvailability(RoutingContext context,
                                           SQLConnection connection,
                                           Handler<AsyncResult<JsonNode>> handler) {

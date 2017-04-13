@@ -24,6 +24,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 
+/**
+ * Represents a single ticket, granting a user admission to a fixture.
+ */
 public class Ticket {
 
     private static final Logger logger = LoggerFactory.getLogger(Ticket.class);

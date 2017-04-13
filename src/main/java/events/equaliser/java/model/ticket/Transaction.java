@@ -16,7 +16,9 @@ import org.slf4j.LoggerFactory;
 import java.time.OffsetDateTime;
 import java.util.Set;
 
-
+/**
+ * Represents a payment from a payment group leader to Equaliser.
+ */
 public class Transaction {
 
     private static final Logger logger = LoggerFactory.getLogger(Transaction.class);

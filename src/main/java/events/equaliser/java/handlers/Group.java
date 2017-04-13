@@ -28,11 +28,20 @@ import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-
+/**
+ * Request handlers related to groups.
+ */
 public class Group {
 
     private static final Logger logger = LoggerFactory.getLogger(Group.class);
 
+    /**
+     * Create a new group.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postCreate(RoutingContext context,
                                   SQLConnection connection,
                                   Handler<AsyncResult<JsonNode>> handler) {
@@ -237,6 +246,12 @@ public class Group {
         }
     }
 
+    /**
+     * Identify a group identifier in a request.
+     * @param request The request.
+     * @param extractor A function to extract the correct field from the request.
+     * @param handler The result.
+     */
     private static void extractGroup(HttpServerRequest request,
                                      BiFunction<HttpServerRequest, String, String> extractor, // request, field -> value
                                      Handler<AsyncResult<Integer>> handler) {
@@ -252,6 +267,13 @@ public class Group {
         }
     }
 
+    /**
+     * Set waiting list preferences for a group
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postTiers(RoutingContext context,
                                  SQLConnection connection,
                                  Handler<AsyncResult<JsonNode>> handler) {
@@ -301,6 +323,13 @@ public class Group {
         }
     }
 
+    /**
+     * Used by a payment group leader to pay for their payment group.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void postPay(RoutingContext context,
                                SQLConnection connection,
                                Handler<AsyncResult<JsonNode>> handler) {
@@ -365,6 +394,13 @@ public class Group {
         });
     }
 
+    /**
+     * Retrieve a group by its identifier.
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     public static void getId(RoutingContext context,
                              SQLConnection connection,
                              Handler<AsyncResult<JsonNode>> handler) {
@@ -389,6 +425,13 @@ public class Group {
         });
     }
 
+    /**
+     * Get a list of a user's groups
+     *
+     * @param context The routing context.
+     * @param connection A database connection.
+     * @param handler The result.
+     */
     @Suspendable
     public static void getList(RoutingContext context,
                                SQLConnection connection,

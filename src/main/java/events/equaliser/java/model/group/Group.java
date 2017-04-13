@@ -1,7 +1,6 @@
 package events.equaliser.java.model.group;
 
 import co.paralleluniverse.fibers.Suspendable;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import events.equaliser.java.model.event.Fixture;
 import events.equaliser.java.model.event.Tier;

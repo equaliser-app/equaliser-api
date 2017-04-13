@@ -13,7 +13,6 @@ import io.vertx.ext.asyncsql.MySQLClient;
 import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sync.Sync;
-import io.vertx.ext.sync.SyncVerticle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

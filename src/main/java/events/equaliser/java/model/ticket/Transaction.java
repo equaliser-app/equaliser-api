@@ -1,6 +1,5 @@
 package events.equaliser.java.model.ticket;
 
-import com.github.mauricio.async.db.mysql.exceptions.MySQLException;
 import events.equaliser.java.model.group.PaymentGroup;
 import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;

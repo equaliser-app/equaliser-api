@@ -1,5 +1,7 @@
 package events.equaliser.java.util;
 
+import org.joda.time.DateTime;
+
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -11,8 +13,6 @@ import java.time.temporal.ChronoField;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import org.joda.time.DateTime;
 
 /**
  * Methods related to parsing and formatting times and timezones.

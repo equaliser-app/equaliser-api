@@ -4,8 +4,6 @@ import events.equaliser.java.model.geography.Coordinates;
 import events.equaliser.java.model.geography.Country;
 import io.vertx.core.json.JsonObject;
 
-import java.awt.Point;
-
 /**
  * A location where a fixture happens.
  */

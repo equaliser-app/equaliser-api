@@ -7,7 +7,6 @@ import events.equaliser.java.model.event.Tier;
 import events.equaliser.java.model.group.Group;
 import events.equaliser.java.model.group.PaymentGroup;
 import events.equaliser.java.model.user.User;
-import events.equaliser.java.util.Json;
 import events.equaliser.java.util.Sms;
 import events.equaliser.java.util.Time;
 import io.vertx.core.AsyncResult;

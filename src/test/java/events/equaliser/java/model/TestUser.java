@@ -2,7 +2,6 @@ package events.equaliser.java.model;
 
 import events.equaliser.java.model.geography.Country;
 import events.equaliser.java.model.geography.TestCountry;
-import events.equaliser.java.model.image.Image;
 import events.equaliser.java.model.user.User;
 import org.junit.Assert;
 import org.junit.Test;

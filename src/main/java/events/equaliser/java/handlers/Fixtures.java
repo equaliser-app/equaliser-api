@@ -1,7 +1,6 @@
 package events.equaliser.java.handlers;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import events.equaliser.java.model.event.Fixture;
 import events.equaliser.java.util.Json;
@@ -16,8 +15,6 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.web.RoutingContext;
-
-import java.awt.*;
 
 /**
  * Request handlers related to fixtures.

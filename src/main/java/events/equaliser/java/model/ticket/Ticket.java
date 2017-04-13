@@ -19,10 +19,9 @@ import io.vertx.ext.sync.Sync;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.*;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Represents a single ticket, granting a user admission to a fixture.

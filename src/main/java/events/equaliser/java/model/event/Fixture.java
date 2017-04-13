@@ -1,13 +1,9 @@
 package events.equaliser.java.model.event;
 
 import events.equaliser.java.util.Time;
-import events.equaliser.java.verticles.PrimaryPoolVerticle;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
-import io.vertx.core.eventbus.EventBus;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.sql.ResultSet;

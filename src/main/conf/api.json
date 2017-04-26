@@ -1,0 +1,25 @@
+{
+  "static": "http://api.equaliser.events:8080",
+  "storage": {
+    "images": "images"
+  },
+  "webserver": {
+    "port": 8080
+  },
+  "database": {
+    "host" : "db.equaliser.events",
+    "username" : "<username>",
+    "password" : "<password>",
+    "database" : "Equaliser",
+    "queryTimeout" : 2000
+  },
+  "twilio": {
+    "sid": "<account sid>",
+    "authToken": "<account auth token>",
+    "number": {
+      "friendly": "Equaliser",
+      "number": "<phone number>",
+      "sid": "<phone number sid>"
+    }
+  }
+}

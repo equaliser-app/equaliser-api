@@ -5,7 +5,7 @@ plugins {
 }
 
 group 'events.equaliser.java.equaliser'
-version '0.0.1'
+version '1.0.0'
 
 // JRE version
 sourceCompatibility = '1.8'
@@ -43,7 +43,7 @@ dependencies {
 shadowJar {
     classifier = 'fat'
     manifest {
-        attributes 'Main-Verticle': 'events.equaliser.java.verticles.MainVerticle'
+        attributes 'Main-Verticle': 'events.equaliser.java.verticles.RestVerticle'
     }
     mergeServiceFiles {
         include 'META-INF/services/io.vertx.core.spi.VerticleFactory'

@@ -4,12 +4,12 @@
     "images": "images"
   },
   "webserver": {
-    "port": 8080
+    "port": 80
   },
   "database": {
-    "host" : "db.equaliser.events",
-    "username" : "<username>",
-    "password" : "<password>",
+    "host" : "database",
+    "username" : "equaliser_api",
+    "password" : "supersecret",
     "database" : "Equaliser",
     "queryTimeout" : 2000
   },
